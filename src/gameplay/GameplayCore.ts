@@ -1,188 +1,29 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Nasodren — Sinüs Harekâtı</title>
-<style>
-  :root{
-    --ink:#060d14;
-    --abyss:#0a1620;
-    --oxygen:#35e0d8;
-    --oxygen-deep:#0e6f70;
-    --cyclamen:#ff4d9d;
-    --cyclamen-deep:#8e2358;
-    --ember:#ff6b3d;
-    --bone:#eef7f9;
-    --muted:#6f92a1;
-    --cut:14px;
-    --face:"Roboto Condensed","Arial Narrow","Helvetica Neue","Segoe UI Semibold",system-ui,sans-serif;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden;background:var(--ink);touch-action:none;overscroll-behavior:none;
-    font-family:var(--face);color:var(--bone);-webkit-font-smoothing:antialiased}
-  #app{position:fixed;inset:0}
-  canvas{position:absolute;inset:0;display:block}
-  #vig{position:absolute;inset:0;z-index:2;pointer-events:none;
-    background:radial-gradient(135% 110% at 50% 46%,rgba(0,0,0,0) 46%,rgba(3,8,12,.78) 100%)}
+// @ts-nocheck
+/*
+ * GameplayCore.ts
+ *
+ * GOAL-004 migration note:
+ * Bu dosya, orijinal nasodren-volfield.html icindeki tek satir-ici <script>
+ * bloğunun (window.__startGame = async function(){ ... }) MINIMUM
+ * DEĞİŞİKLİKLE taşınmış halidir.
+ *
+ * Yapilan TEK yapisal degisiklikler:
+ *   1) `window.__startGame = async function(){` -> `export async function startGame(){`
+ *      (global fonksiyon atamasi yerine ES module export'u).
+ *   2) Global `PIXI` nesnesi yerine `import * as PIXI from 'pixi.js'` (npm bagimliligi).
+ *   3) Bu dosyanin basina `// @ts-nocheck` eklendi: orijinal kod tip-siz JS
+ *      oldugu icin, "refactor yapma" kuralina uyarak hicbir tip/null-check
+ *      eklenmedi; derleme (build) esbuild ile tip kontrolu yapilmadan
+ *      gerceklestiriliyor (bkz. package.json build script).
+ *
+ * Gameplay mantigi, flood-fill algoritmasi, dusman davranislari, skor
+ * sistemi, alan kapatma mantigi vs. BIREBIR AYNI birakildi. PIXI v6/v7/v8
+ * uyumluluk dallanmalari (MAJOR kontrolleri) da bilerek dokunulmadan
+ * korundu.
+ */
+import * as PIXI from 'pixi.js';
 
-  /* ---------- HUD ---------- */
-  #hud{position:absolute;left:0;right:0;top:0;z-index:3;pointer-events:none;
-    padding:calc(10px + env(safe-area-inset-top)) 16px 12px;
-    background:linear-gradient(180deg,rgba(6,13,20,.92) 12%,rgba(6,13,20,.55) 70%,rgba(6,13,20,0))}
-  .row{display:flex;align-items:flex-end;gap:14px}
-  .lbl{font-size:10px;letter-spacing:.22em;color:var(--muted);line-height:1;margin-bottom:5px;font-weight:600}
-  .num{font-size:26px;line-height:.86;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
-  #day .num{color:var(--oxygen);text-shadow:0 0 16px rgba(53,224,216,.55)}
-  #scoreBox{margin-left:auto;text-align:right}
-  #scoreBox .num{color:var(--bone)}
-  #stage{flex:1;min-width:0}
-  #stageName{font-size:13px;letter-spacing:.19em;font-weight:600;color:var(--bone);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:7px;opacity:.9}
-  .gauge{position:relative;height:4px;background:rgba(255,255,255,.08)}
-  .gauge>span{position:absolute;left:0;top:0;bottom:0;width:0;
-    background:linear-gradient(90deg,var(--oxygen-deep),var(--oxygen));
-    box-shadow:0 0 12px rgba(53,224,216,.75);transition:width .22s cubic-bezier(.2,.8,.3,1)}
-  .gauge>i{position:absolute;top:-5px;bottom:-5px;width:1px;background:var(--bone);opacity:.6}
-  #pctRead{font-size:12px;letter-spacing:.12em;color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums}
-  #pctRead b{color:var(--oxygen);font-weight:700}
-  #pctRead.met b{color:#9df58a}
-
-  #sub{display:flex;align-items:center;gap:16px;margin-top:11px}
-  #doseWrap{width:96px}
-  #dose{position:relative;height:3px;background:rgba(255,255,255,.08)}
-  #dose>span{position:absolute;inset:0 auto 0 0;width:100%;
-    background:linear-gradient(90deg,#7a5a12,#ffc24a);box-shadow:0 0 10px rgba(255,194,74,.5)}
-  #lives{display:flex;gap:6px}
-  .pip{width:9px;height:13px;background:var(--cyclamen);
-    clip-path:polygon(50% 0,100% 58%,74% 100%,26% 100%,0 58%);
-    box-shadow:0 0 12px rgba(255,77,157,.6)}
-  .pip.off{background:rgba(255,255,255,.13);box-shadow:none}
-  #buffs{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
-  .buff{font-size:10px;letter-spacing:.14em;font-weight:600;padding:4px 9px 3px;color:var(--oxygen);
-    border:1px solid rgba(53,224,216,.4);background:rgba(53,224,216,.08);white-space:nowrap;
-    clip-path:polygon(0 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%)}
-  .buff.warn{color:#ffb1c9;border-color:rgba(255,77,157,.45);background:rgba(255,77,157,.1)}
-
-  #toast{position:absolute;left:50%;top:26%;transform:translate(-50%,-50%);z-index:3;pointer-events:none;
-    text-align:center;opacity:0;transition:opacity .18s}
-  #toast.on{opacity:1}
-  #toast .t{font-size:30px;font-weight:700;letter-spacing:.1em;color:var(--cyclamen);
-    text-shadow:0 0 28px rgba(255,77,157,.8),0 2px 0 rgba(0,0,0,.5)}
-  #toast .s{font-size:11px;letter-spacing:.22em;color:var(--bone);opacity:.8;margin-top:8px}
-
-  /* ---------- panolar ---------- */
-  #overlay{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;padding:22px;
-    background:linear-gradient(180deg,rgba(6,13,20,.9),rgba(4,9,13,.94))}
-  #overlay.on{display:flex}
-  .plateEdge{width:min(520px,100%);background:linear-gradient(150deg,var(--oxygen),rgba(53,224,216,.25) 45%,rgba(255,77,157,.5));
-    clip-path:polygon(0 var(--cut),var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%);
-    filter:drop-shadow(0 22px 48px rgba(0,0,0,.65))}
-  .plate{margin:1px;padding:30px 30px 26px;background:linear-gradient(165deg,#0d1a24,#081119 60%,#0b141d);
-    clip-path:polygon(0 var(--cut),var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%)}
-  .kicker{font-size:10px;letter-spacing:.32em;color:var(--oxygen);font-weight:600;margin-bottom:14px}
-  .title{font-size:clamp(30px,7.5vw,50px);line-height:.92;font-weight:700;letter-spacing:.01em;margin-bottom:16px}
-  .title em{font-style:normal;color:var(--cyclamen);text-shadow:0 0 30px rgba(255,77,157,.6)}
-  .lede{font-size:14px;line-height:1.68;color:#b7cfd6;max-width:46ch;margin-bottom:18px}
-  .rule{height:1px;margin:20px 0;background:linear-gradient(90deg,rgba(53,224,216,.7),rgba(53,224,216,0))}
-  .note{font-size:12.5px;line-height:1.62;color:var(--muted);border-left:2px solid var(--cyclamen-deep);
-    padding-left:14px;margin-bottom:20px;max-width:46ch}
-  .note b{color:var(--cyclamen);font-weight:600}
-  .stats{display:flex;gap:30px;margin-bottom:22px;flex-wrap:wrap}
-  .stats div span{display:block;font-size:9.5px;letter-spacing:.22em;color:var(--muted);margin-bottom:6px;font-weight:600}
-  .stats div b{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.02em}
-  .keys{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;font-size:12.5px;color:#9fbcc4;margin-bottom:20px}
-  .keys b{color:var(--oxygen);font-weight:600;letter-spacing:.1em;font-size:11px}
-  .acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
-  .cta{padding:14px 30px 13px;font-size:13px;font-weight:700;letter-spacing:.2em;color:#04191c;
-    background:linear-gradient(100deg,var(--oxygen),#7bf0e6);
-    clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%);
-    transition:filter .15s,transform .1s}
-  .cta:hover{filter:brightness(1.12)}
-  .cta:active{transform:translateY(1px)}
-  .ghost{padding:14px 18px 13px;font-size:12px;letter-spacing:.2em;color:var(--muted);font-weight:600}
-  .ghost:hover{color:var(--bone)}
-  button:focus-visible{outline:2px solid var(--cyclamen);outline-offset:3px}
-
-  /* ---------- kontroller ---------- */
-  #pad{position:absolute;inset:0;z-index:4;touch-action:none}
-  #ring,#knob{position:absolute;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .12s}
-  #ring{width:116px;height:116px;margin:-58px 0 0 -58px;border:1px solid rgba(53,224,216,.35);
-    background:radial-gradient(circle,rgba(53,224,216,.07),transparent 68%)}
-  #knob{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(53,224,216,.42);
-    box-shadow:0 0 26px rgba(53,224,216,.55)}
-  #ring.on,#knob.on{opacity:1}
-  #tools{position:absolute;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:5;display:flex;gap:9px}
-  .tool{width:42px;height:38px;font-size:10px;letter-spacing:.14em;font-weight:600;color:var(--muted);
-    border:1px solid rgba(255,255,255,.13);background:rgba(8,17,25,.7);
-    clip-path:polygon(0 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%)}
-  .tool:hover{color:var(--bone);border-color:rgba(53,224,216,.4)}
-  #fps{position:absolute;left:16px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:5;
-    font-size:10px;letter-spacing:.16em;color:var(--muted);display:none;font-variant-numeric:tabular-nums}
-  #fps.on{display:block}
-  #boot{position:absolute;inset:0;z-index:9;display:grid;place-items:center;
-    font-size:11px;letter-spacing:.34em;color:var(--oxygen)}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
-</head>
-<body>
-<div id="app">
-  <div id="boot">YÜKLENİYOR</div>
-  <div id="vig"></div>
-
-  <div id="hud">
-    <div class="row">
-      <div id="day"><div class="lbl">GÜN</div><div class="num">01</div></div>
-      <div id="stage">
-        <div id="stageName">Akut tıkanıklık</div>
-        <div class="gauge"><span id="gaugeFill"></span><i id="gaugeGoal"></i></div>
-        <div id="pctRead"><b>%0</b> temizlendi &nbsp;/&nbsp; hedef %70</div>
-      </div>
-      <div id="scoreBox"><div class="lbl">SKOR</div><div class="num" id="scoreVal">0</div></div>
-    </div>
-    <div id="sub">
-      <div id="doseWrap"><div class="lbl">DOZ KALKANI</div><div id="dose"><span id="doseFill"></span></div></div>
-      <div id="lives"></div>
-      <div id="buffs"></div>
-    </div>
-  </div>
-
-  <div id="toast"><div class="t"></div><div class="s"></div></div>
-
-  <div id="pad"><div id="ring"></div><div id="knob"></div></div>
-  <div id="tools">
-    <button class="tool" id="btnSound" aria-label="Sesi aç veya kapat">SES</button>
-    <button class="tool" id="btnPause" aria-label="Duraklat">DUR</button>
-  </div>
-  <div id="fps"></div>
-  <div id="overlay"><div class="plateEdge"><div class="plate" id="plate"></div></div></div>
-</div>
-
-<script>
-(function loadPixi(){
-  const urls = [
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.3/pixi.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.2.6/pixi.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.10/browser/pixi.min.js"
-  ];
-  let i = 0;
-  (function next(){
-    if(i >= urls.length){ document.getElementById('boot').textContent = 'PIXI YÜKLENEMEDİ'; return; }
-    const s = document.createElement('script');
-    s.src = urls[i++];
-    s.onload = () => { if(window.PIXI) window.__startGame(); else next(); };
-    s.onerror = next;
-    document.head.appendChild(s);
-  })();
-})();
-</script>
-
-<script>
-window.__startGame = async function(){
+export async function startGame(){
 "use strict";
 
 /* =========================================================================
@@ -1431,7 +1272,5 @@ showPanel(
    <p class="note">Çizgi çizerken hem sen hem arkanda bıraktığın iz savunmasız.
       Güvenli bölgede beklemek <b>doz kalkanını</b> eritir; kalkan bitince ağrı dalgaları seni orada da vurur.</p>
    <div class="acts"><button class="cta" data-a="start">TEDAVİYE BAŞLA</button></div>`);
+
 };
-</script>
-</body>
-</html>

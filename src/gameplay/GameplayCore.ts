@@ -22,6 +22,10 @@
  * korundu.
  */
 import * as PIXI from 'pixi.js';
+// GOAL-009 (Görsel Revizyon Sprinti 1): prosedürel dokuların yerini alan gerçek assetler.
+import playerAssetUrl from '../../assets/siklament.png';   // oyuncu sprite'ı
+import bossAssetUrl from '../../assets/bacteria.png';      // boss sprite'ı
+import bgFlowerAssetUrl from '../../assets/siclament.png'; // arka planda açığa çıkan büyük siklamen
 
 export async function startGame(){
 "use strict";
@@ -41,6 +45,23 @@ function texFromCanvas(cv){
   return t;
 }
 function texUpdate(t){ try{ if(MAJOR>=8) t.source.update(); else t.baseTexture.update(); }catch(e){} }
+/* GOAL-009: PNG asset -> PIXI texture (texFromCanvas ile aynı ölçek-modu mantığı) */
+function texFromImage(img){
+  const t = PIXI.Texture.from(img);
+  try{
+    if(MAJOR >= 8) t.source.scaleMode = 'linear';
+    else t.baseTexture.scaleMode = PIXI.SCALE_MODES.LINEAR;
+  }catch(e){}
+  return t;
+}
+function loadImage(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
 
 /* =========================================================================
    1. MATEMATİK YARDIMCILARI
@@ -96,11 +117,11 @@ const EMPTY = 0, FILL = 1, TRAIL = 2;
 
 const PU = { SPEED:0, FREEZE:1, LASER:2, BOMB:3, DOSE:4 };
 const PU_META = [
-  { key:'SPEED',  label:'Sürfaktan hızı',    letter:'S', color:'#35e0d8', dur:9  },
-  { key:'FREEZE', label:'Ozmotik dondurma',  letter:'T', color:'#8fb9ff', dur:6  },
-  { key:'LASER',  label:'Siliyer aktivasyon',letter:'L', color:'#9ef05a', dur:10 },
-  { key:'BOMB',   label:'Trigeminal refleks',letter:'C', color:'#ff4d9d', dur:0  },
-  { key:'DOSE',   label:'Doz yenilendi',     letter:'P', color:'#ffc24a', dur:0  }
+  { key:'SPEED',  label:'Sürfaktan hızı',    letter:'💨', color:'#35e0d8', dur:9  },
+  { key:'FREEZE', label:'Ozmotik dondurma',  letter:'❄', color:'#8fb9ff', dur:6  },
+  { key:'LASER',  label:'Siliyer aktivasyon',letter:'⚡', color:'#9ef05a', dur:10 },
+  { key:'BOMB',   label:'Trigeminal refleks',letter:'💥', color:'#ff4d9d', dur:0  },
+  { key:'DOSE',   label:'Doz yenilendi',     letter:'💧', color:'#ffc24a', dur:0  }
 ];
 
 const LEVELS = [
@@ -215,63 +236,9 @@ function texRadial(size, stops){
   c.fillStyle = g; c.fillRect(0,0,size,size);
   return texFromCanvas(cv);
 }
-/* oyuncu: siklamen çiçeği — hacimli gölgeleme, kenar ışığı, parlak çekirdek */
-function texPlayer(){
-  const S = 160, cv = makeCanvas(S,S), c = cv.getContext('2d');
-  const img = c.createImageData(S,S), d = img.data, m = (S-1)/2;
-  const petal = [hex2rgb('#4a0c30'),hex2rgb('#9c1b5e'),hex2rgb('#ff4d9d'),hex2rgb('#ffa8d2'),hex2rgb('#fff0f7')];
-  const R = m*.94;
-  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
-    const i = y*S+x, dx = x-m, dy = y-m, dist = Math.hypot(dx,dy), a = Math.atan2(dy,dx);
-    const lobe = Math.abs(Math.cos(2.5*a + .25));
-    const r = R*(.34 + .66*Math.pow(lobe,.62));
-    const edge = sstep(r, r-2.4, dist);
-    if(edge <= 0) continue;
-    const q = clamp(dist/r,0,1);
-    // yaprak damarları
-    const vein = Math.abs(Math.sin((a*5 + q*9)))*.5 + .5;
-    let shade = .30 + (1-q)*.62 + vein*.10;
-    // üstten ışık
-    shade += (-dy/R)*.16 - (dx/R)*.05;
-    // kenar ışığı
-    shade += sstep(.72,1,q)*.30;
-    let col = ramp(petal, clamp(shade,0,1));
-    // parlak çekirdek (damla)
-    const coreR = R*.20;
-    if(dist < coreR*1.5){
-      const k = sstep(coreR*1.5, coreR*.25, dist);
-      col = mixc(col, [255,255,255], k*.95);
-    }
-    d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3] = 255*edge;
-  }
-  c.putImageData(img,0,0);
-  return texFromCanvas(cv);
-}
-/* boss: iltihap kütlesi — iç ışıma, kabuk, çatlaklar */
-function texBoss(){
-  const S = 320, cv = makeCanvas(S,S), c = cv.getContext('2d');
-  const img = c.createImageData(S,S), d = img.data, m = (S-1)/2;
-  const n1 = fbm(S,S,54,4242,3), n2 = fbm(S,S,15,9111,3);
-  const cols = [hex2rgb('#2b0208'),hex2rgb('#6d0d18'),hex2rgb('#c4202b'),hex2rgb('#ff7a3c'),hex2rgb('#ffe3b0')];
-  const R = m*.96;
-  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
-    const i = y*S+x, dx = x-m, dy = y-m, dist = Math.hypot(dx,dy), a = Math.atan2(dy,dx);
-    const wob = .84 + Math.sin(a*3+1.1)*.055 + Math.cos(a*5-.4)*.035 + (n1[i]-.5)*.16;
-    const r = R*wob;
-    const edge = sstep(r, r-3.5, dist);
-    if(edge <= 0) continue;
-    const q = clamp(dist/r,0,1);
-    // çekirdekten dışa doğru ışıma + çatlak dokusu
-    const crack = Math.pow(1-Math.abs(n2[i]*2-1), 3);
-    let t = (1-q)*.92 + crack*.28 - (n1[i]-.5)*.22;
-    t += (-dy/R)*.10;
-    let col = ramp(cols, clamp(t,0,1));
-    if(q > .86) col = mixc(col, hex2rgb('#ff9a6a'), sstep(.86,1,q)*.55);   // kabuk ışığı
-    d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3] = 255*edge;
-  }
-  c.putImageData(img,0,0);
-  return texFromCanvas(cv);
-}
+/* GOAL-009: oyuncu ve boss artık gerçek PNG assetlerinden (bkz. texFromImage
+   + loadImage, TEX nesnesi kurulumu) — eski prosedürel texPlayer()/texBoss()
+   kaldırıldı. */
 function texMinion(kind){
   const S = 96, cv = makeCanvas(S,S), c = cv.getContext('2d');
   const img = c.createImageData(S,S), d = img.data, m = (S-1)/2;
@@ -320,11 +287,11 @@ function texPowerup(meta){
   c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,.35)';
   c.strokeRect(-R+6,-R+6,(R-6)*2,(R-6)*2);
   c.rotate(-Math.PI/4);
-  c.font = '700 34px "Roboto Condensed","Arial Narrow",Helvetica,sans-serif';
+  c.font = '38px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji","Roboto Condensed",sans-serif';
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillStyle = meta.color;
   c.shadowColor = meta.color; c.shadowBlur = 16;
-  c.fillText(meta.letter, 0, 2);
+  c.fillText(meta.letter, 0, 3);
   return texFromCanvas(cv);
 }
 function texGrain(){
@@ -346,44 +313,17 @@ function paintHealthy(L){
   const warm = L.day >= 7;
   const air = [hex2rgb('#04141c'), hex2rgb('#0a3140'), hex2rgb(warm?'#12646a':'#105059'),
                hex2rgb(warm?'#1f8f8a':'#17747a'), hex2rgb('#5fd8cf')];
-  const petal = [hex2rgb('#3c0a26'),hex2rgb('#8e1f5a'),hex2rgb('#ff4d9d'),hex2rgb('#ffb0d6'),hex2rgb('#fff2f8')];
-  const leafC = [hex2rgb('#07281f'),hex2rgb('#16553c'),hex2rgb('#2f8f63'),hex2rgb('#7fd3a4')];
   const n1 = fbm(HW,HH,60,1777,3), n2 = fbm(HW,HH,14,5051,2);
   const fx = HW*.5, fy = HH*.44, FR = HH*.30;
   for(let y=0;y<HH;y++) for(let x=0;x<HW;x++){
     const i = y*HW+x;
-    // doku zemini: derinlik + ışık huzmesi
+    // doku zemini: derinlik + ışık huzmesi (GOAL-009: ortam dokusu aynı kaldı,
+    // sadece prosedürel çiçek/yaprak/sap deseni kaldırıldı — bkz. drawImage aşağıda)
     const vig = clamp(1 - Math.hypot((x/HW-.5)*1.5,(y/HH-.5)*1.6), 0, 1);
     const shaft = sstep(.25,.9, Math.sin((x*.55 + y*1.15)/HW*3.1)*.5+.5);
     let t = clamp(.12 + n1[i]*.52 + vig*.42 + shaft*.12 + (1-y/HH)*.14, 0, 1);
     let col = ramp(air, t);
     col = mixc(col, [180,255,250], n2[i]*n2[i]*.10);
-    // yapraklar
-    const lx = x-fx, ly = (y-fy-FR*.55)*1.35;
-    const ld = Math.hypot(lx,ly), la = Math.atan2(ly,lx);
-    const lr = FR*1.02*(.30+.70*Math.abs(Math.sin(la*2+.6)));
-    if(ld < lr && y > fy){
-      const lq = ld/lr;
-      const vein = Math.abs(Math.sin(la*9 + lq*6))*.35;
-      col = mixc(col, ramp(leafC, clamp((1-lq)*.85 + vein, 0, 1)), sstep(lr, lr-4, ld));
-    }
-    // sap
-    const stem = sstep(3.5, 1.2, Math.abs(x-fx));
-    if(stem > 0 && y > fy && y < fy+FR*1.5) col = mixc(col, hex2rgb('#2f8f63'), stem*.9);
-    // çiçek
-    const dx = x-fx, dy = (y-fy)*1.06, dd = Math.hypot(dx,dy), a = Math.atan2(dy,dx);
-    const lobe = Math.abs(Math.cos(2.5*a + .3));
-    const r = FR*(.32+.68*Math.pow(lobe,.6));
-    const e = sstep(r, r-3, dd);
-    if(e > 0){
-      const q = clamp(dd/r,0,1);
-      const vein = Math.abs(Math.sin(a*5 + q*8))*.5+.5;
-      let sh = .26 + (1-q)*.64 + vein*.10 + (-dy/r)*.14;
-      sh += sstep(.74,1,q)*.24;
-      let pc = ramp(petal, clamp(sh,0,1));
-      if(dd < r*.2) pc = mixc(pc, hex2rgb('#fff6c8'), sstep(r*.2, 0, dd)*.85);
-      col = mixc(col, pc, e);
-    }
     d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3]=255;
   }
   c.putImageData(img,0,0);
@@ -398,6 +338,11 @@ function paintHealthy(L){
     c.fillStyle = g; c.beginPath(); c.arc(x,y,r,0,7); c.fill();
   }
   c.globalCompositeOperation = 'source-over';
+  // GOAL-009: prosedürel çiçek yerine gerçek siklamen asseti — flood-fill
+  // reveal mekanizması (rasterRegion/dzTex) bu katmanın ÜSTÜNE bindiği için
+  // hiç dokunulmadı, sadece altta açığa çıkan görsel değişti.
+  const FS = FR * 2.3;
+  c.drawImage(bgFlowerImg, fx - FS/2, fy - FS/2, FS, FS);
 }
 
 /* ---- hastalıklı doku rengi (alfa ayrı hesaplanır) ---- */
@@ -467,6 +412,14 @@ const app = await (async () => {
 })();
 const view = (MAJOR>=8) ? app.canvas : app.view;
 document.getElementById('app').insertBefore(view, document.getElementById('vig'));
+
+/* GOAL-009: gerçek assetler — PIXI kurulumundan hemen sonra, TEX nesnesinden
+   önce yükleniyor ki texFromImage() çağrıldığında görsel hazır olsun. */
+const [playerImg, bossImg, bgFlowerImg] = await Promise.all([
+  loadImage(playerAssetUrl), loadImage(bossAssetUrl), loadImage(bgFlowerAssetUrl)
+]);
+const PLAYER_AR = playerImg.height / playerImg.width; // en-boy oranı korunsun diye
+
 const bootEl = document.getElementById('boot'); if(bootEl) bootEl.remove();
 
 const root = new PIXI.Container(), shakeRoot = new PIXI.Container();
@@ -539,8 +492,8 @@ function rasterRegion(cx0, cy0, cx1, cy1){
 const TEX = {
   glow:   texRadial(256, [[0,'rgba(255,255,255,1)'],[.28,'rgba(255,255,255,.45)'],[1,'rgba(255,255,255,0)']]),
   spark:  texRadial(64,  [[0,'rgba(255,255,255,1)'],[.4,'rgba(255,255,255,.6)'],[1,'rgba(255,255,255,0)']]),
-  player: texPlayer(),
-  boss:   texBoss(),
+  player: texFromImage(playerImg),
+  boss:   texFromImage(bossImg),
   mini:   [texMinion(0), texMinion(1)],
   pu:     PU_META.map(texPowerup),
   grain:  texGrain()
@@ -560,7 +513,8 @@ const playerGlow = new PIXI.Sprite(TEX.glow);
 playerGlow.anchor.set(.5); playerGlow.width = playerGlow.height = 96;
 playerGlow.blendMode = BLEND_ADD; playerGlow.tint = 0xff87c0; playerGlow.alpha = .5;
 const playerSprite = new PIXI.Sprite(TEX.player);
-playerSprite.anchor.set(.5); playerSprite.width = playerSprite.height = 30;
+playerSprite.anchor.set(.5);
+playerSprite.width = 34; playerSprite.height = 34 * PLAYER_AR; // GOAL-009: gerçek PNG en-boy oranı + okunabilirlik için hafif büyütme (30->34)
 layerEnt.addChild(playerGlow, playerSprite);
 
 function pool(container, make, n){
@@ -575,6 +529,38 @@ const trailGlow = pool(layerTrail, ()=>{ const s = new PIXI.Sprite(PIXI.Texture.
 const particles = [];
 const partSprites = pool(layerEnt, ()=>{ const s = new PIXI.Sprite(TEX.spark);
   s.anchor.set(.5); s.blendMode = BLEND_ADD; return s; }, 300);
+
+/* GOAL-009: uçan skor yazıları — particles[]/partSprites ile birebir aynı
+   havuz+yaşam-döngüsü deseni, sadece kıvılcım yerine sayı dokusu çiziyor. */
+const scorePops = [];
+const scorePopPool = pool(layerEnt, ()=>{ const s = new PIXI.Sprite(TEX.spark);
+  s.anchor.set(.5); return s; }, 6);
+function spawnScorePopup(gx, gy, amount){
+  if(amount <= 0) return;
+  const cv = makeCanvas(220,64), c = cv.getContext('2d');
+  c.font = '700 34px "Roboto Condensed","Arial Narrow",Helvetica,sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.shadowColor = '#35e0d8'; c.shadowBlur = 14;
+  c.fillStyle = '#eaffFb';
+  c.fillText('+'+Math.round(amount).toLocaleString('tr-TR'), 110, 32);
+  scorePops.push({ x:gx, y:gy, life:1.1, dur:1.1, tex:texFromCanvas(cv) });
+}
+function updateScorePops(dt){
+  for(let i=scorePops.length-1;i>=0;i--){
+    const p = scorePops[i];
+    p.life -= dt;
+    if(p.life <= 0){ p.tex.destroy(true); scorePops.splice(i,1); }
+  }
+  for(let i=0;i<scorePopPool.length;i++){
+    const s = scorePopPool[i], p = scorePops[i];
+    if(!p){ s.visible = false; continue; }
+    s.visible = true; s.texture = p.tex;
+    const k = 1 - p.life/p.dur;
+    s.x = p.x*CS; s.y = p.y*CS - k*46;
+    s.width = 150; s.height = 44;
+    s.alpha = clamp(p.life/(p.dur*.4), 0, 1);
+  }
+}
 
 /* =========================================================================
    7. OYUN DURUMU
@@ -633,7 +619,7 @@ function syncHUD(){
   let bf = '';
   for(const k in G.buffs){
     const m = PU_META.find(p=>p.key===k);
-    bf += '<div class="buff">'+m.label+' · '+Math.ceil(G.buffs[k])+'s</div>';
+    bf += '<div class="buff">'+m.letter+' '+Math.ceil(G.buffs[k])+'s</div>';
   }
   if(G.dose <= 0) bf += '<div class="buff warn">Kalkan düştü</div>';
   UI.buffs.innerHTML = bf;
@@ -914,21 +900,32 @@ function closeTrail(){
   }
   for(let k=G.pus.length-1;k>=0;k--){
     const p = G.pus[k];
-    if(cells[p.y*GW+p.x] === FILL){ grabPowerup(p); p.s.destroy(); p.g.destroy(); G.pus.splice(k,1); }
+    if(!p.collected && cells[p.y*GW+p.x] === FILL){
+      grabPowerup(p);
+      p.collected = true; p.collectT = 0; // GOAL-009: hemen yok etmek yerine render() içinde büyüyüp sönsün
+    }
   }
   const ns = Math.min(110, 14 + ((gain/32)|0));
   for(let n=0;n<ns;n++){
     const i = newCells[(Math.random()*newCells.length)|0];
     burst(i%GW, (i/GW)|0, 1, 0x9ff0ec, .7);
   }
-  G.score += Math.round(gain*1.2);
+  const areaScore = Math.round(gain*1.2);
+  G.score += areaScore;
   G.dose = clamp(G.dose + share*G.doseMax*2.2, 0, G.doseMax);
   Sound.capture(share);
   G.shake = Math.min(7, share*40);
+  let popupScore = areaScore;
   if(share >= MEGA_SHARE){
     G.score += 1500;
-    toast('Mega drenaj', 'TEK HAMLEDE %'+Math.round(share*100)+' · +1500');
+    popupScore += 1500;
+    toast('MÜKEMMEL', 'TEK HAMLEDE %'+Math.round(share*100)+' · +1500');
+  } else if(share >= 0.03){
+    toast('BÜYÜK TEMİZLİK', '+%'+Math.round(share*100)+' alan');
+  } else if(share > 0){
+    toast('GÜZEL', '+%'+(share*100).toFixed(1)+' alan');
   }
+  spawnScorePopup((minX+maxX)/2, (minY+maxY)/2, popupScore);
 
   G.drawing = false; G.trail = []; G.corners = [];
   G.startCell = G.py*GW+G.px;
@@ -938,6 +935,7 @@ function closeTrail(){
 function grabPowerup(p){
   const m = PU_META[p.k];
   Sound.pickup(); G.score += 400;
+  burst(p.x, p.y, 16, parseInt(m.color.slice(1),16), 1);
   if(p.k === PU.BOMB){
     for(let k=G.minions.length-1;k>=0;k--){
       const mm = G.minions[k];
@@ -1163,7 +1161,7 @@ function render(dt){
   playerSprite.rotation = Math.sin(t*1.1)*.10;
   const blink = G.invuln > 0 ? (Math.sin(t*30) > 0 ? .25 : 1) : 1;
   playerSprite.alpha = blink;
-  playerSprite.width = playerSprite.height = 30 + Math.sin(t*4.2)*1.4;
+  { const pw = 34 + Math.sin(t*4.2)*1.4; playerSprite.width = pw; playerSprite.height = pw * PLAYER_AR; }
   playerGlow.alpha = (.34 + Math.sin(t*4.2)*.12) * blink * (G.drawing ? 1.5 : 1);
   playerGlow.width = playerGlow.height = 96 + Math.sin(t*4.2)*12;
   playerLight.alpha = (.14 + Math.sin(t*2.1)*.03) * (G.drawing ? 1.6 : 1);
@@ -1182,8 +1180,21 @@ function render(dt){
   }
   for(const b of G.bullets){ b.s.x = b.x*CS; b.s.y = b.y*CS; }
   for(const s of G.shots){ s.s.x = s.x*CS; s.s.y = s.y*CS; }
-  for(const p of G.pus){
+  for(let i=G.pus.length-1;i>=0;i--){
+    const p = G.pus[i];
     p.t += dt;
+    if(p.collected){
+      // GOAL-009: toplama anı — ikon büyür + glow artar + söner, sonra temizlenir
+      p.collectT += dt;
+      const k = clamp(p.collectT/0.35, 0, 1);
+      p.s.x = p.g.x = (p.x+.5)*CS; p.s.y = p.g.y = (p.y+.5)*CS;
+      p.s.visible = p.g.visible = true;
+      p.s.width = p.s.height = 34 * (1 + k*0.9);
+      p.g.width = p.g.height = 80 * (1 + k*1.4);
+      p.s.alpha = p.g.alpha = 1 - k;
+      if(p.collectT >= 0.35){ p.s.destroy(); p.g.destroy(); G.pus.splice(i,1); }
+      continue;
+    }
     const yy = (p.y+.5)*CS + Math.sin(p.t*2.1)*3.5;
     p.s.x = p.g.x = (p.x+.5)*CS; p.s.y = p.g.y = yy;
     p.s.rotation = Math.sin(p.t*1.3)*.14;
@@ -1242,9 +1253,11 @@ app.ticker.add(()=>{
     movePlayer(dt);
     updateEnemies(dt);
     updateParticles(dt);
+    updateScorePops(dt);
     if(buffChanged || Math.floor(G.time*4) !== Math.floor((G.time-dt)*4)) syncHUD();
   } else {
     updateParticles(dt*.4);
+    updateScorePops(dt*.4);
   }
   render(dt);
 });

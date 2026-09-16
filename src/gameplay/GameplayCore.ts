@@ -28,6 +28,7 @@ import bossAssetUrl from '../../assets/bacteria.png';      // boss sprite'ı
 import bgFlowerAssetUrl from '../../assets/siclament.png'; // arka planda açığa çıkan büyük siklamen
 import minionFlagellaAssetUrl from '../../assets/minion_flagella.png'; // kind:0 minion
 import minionSporeAssetUrl from '../../assets/minion_spore.png';       // kind:1 minion
+import healthAssetUrl from '../../assets/health.png'; // GOAL-013: can ikonu
 
 export async function startGame(){
 "use strict";
@@ -128,34 +129,34 @@ const PU_META = [
 
 const LEVELS = [
   { day:1,  name:'Akut tıkanıklık',       target:.70, bossR:9,  bossSpd:15, bossN:1, fire:0.00, mini:3,  miniSpd:19, dose:75, pu:3,
-    med:'İlk uygulamadan <b>2-3 dakika</b> sonra yoğun mukopürülan drenaj başlar.',
+    med:'Tıkanıklık zirvede. Harekete geç!',
     pal:['#150409','#5d0c18','#c2202c','#ff7a4a'] },
   { day:2,  name:'Ödem ve basınç',        target:.72, bossR:9,  bossSpd:17, bossN:1, fire:0.35, mini:4,  miniSpd:21, dose:70, pu:3,
-    med:'Saponinler hücre zarındaki <b>yüzey gerilimini</b> düşürür; hücre içi sıvı dışarı çekilir.',
+    med:'Basınç artıyor. Sıkı dur!',
     pal:['#1a050c','#6d1020','#d12a35','#ff8a5a'] },
   { day:3,  name:'Hipereminin kırılması', target:.75, bossR:8,  bossSpd:19, bossN:1, fire:0.55, mini:5,  miniSpd:23, dose:66, pu:4,
-    med:'Doku ödemi belirgin azalır; <b>yüz ve orbital ağrı</b> çekilmeye başlar.',
+    med:'Kızarıklık kırılıyor, nefes yakın.',
     pal:['#220711','#83182b','#e0455c','#ffa08a'] },
   { day:4,  name:'Mukus yoğunluğu',       target:.77, bossR:8,  bossSpd:21, bossN:1, fire:0.75, mini:6,  miniSpd:25, dose:62, pu:4,
-    med:'Kalın pıhtılar siliyer hareketi engeller. İçeri hapsettiklerin temizlenir.',
+    med:'Mukus koyulaştı. Sıkı temizlik!',
     pal:['#240c07','#8a3a1c','#dc7a2c','#ffc56a'] },
   { day:5,  name:'Drenajın düzenlenmesi', target:.79, bossR:7,  bossSpd:23, bossN:1, fire:0.95, mini:7,  miniSpd:27, dose:58, pu:4,
-    med:'5. günde salgının <b>pürülan bileşeni</b> kaybolur, drenaj standardize olur.',
+    med:'Drenaj düzeliyor, ritim tuttur.',
     pal:['#1f1806','#7d6316','#d8b433','#ffe58a'] },
   { day:6,  name:'Ostium açılımı',        target:.80, bossR:7,  bossSpd:25, bossN:1, fire:1.15, mini:8,  miniSpd:29, dose:55, pu:5,
-    med:'Sinüsleri burun boşluğuna bağlayan kanallar açılmaya başlar.',
+    med:'Kanallar aralanıyor, hava sızıyor.',
     pal:['#13230c','#3f6b21','#8ec63c','#d6f58a'] },
   { day:7,  name:'Normal fonksiyon',      target:.82, bossR:10, bossSpd:26, bossN:1, fire:1.35, mini:9,  miniSpd:30, dose:52, pu:5,
-    med:'Hastaların <b>%90</b>’ında normal mukoza fonksiyonu geri döner.',
+    med:'Doku normale dönüyor. Devam!',
     pal:['#07211f','#16575a','#38a8a2','#9af0e2'] },
   { day:8,  name:'Koruma modu',           target:.83, bossR:7,  bossSpd:27, bossN:2, fire:1.45, mini:9,  miniSpd:31, dose:50, pu:5,
-    med:'Günde tek doz, <b>24 saatlik</b> drenaj desteği sağlar.',
+    med:'Koruma modu: günde tek doz.',
     pal:['#061c24','#125560','#33a5bb','#95e8f5'] },
   { day:9,  name:'Kronik destek',         target:.85, bossR:7,  bossSpd:29, bossN:2, fire:1.60, mini:10, miniSpd:33, dose:48, pu:5,
-    med:'Anatomik anomalilere (polipler) rağmen boşlukların havalandırılması hedeflenir.',
+    med:'Direnç kırılıyor, son viraj.',
     pal:['#0a1028','#283f7c','#5f7fd0','#b9cbff'] },
   { day:10, name:'Tam havalandırma',      target:.88, bossR:9,  bossSpd:31, bossN:2, fire:1.80, mini:11, miniSpd:35, dose:46, pu:5,
-    med:'Kür tamamlandı: ostiumlar açık, siliyer temizlik aktif, enfeksiyon odağı yok.',
+    med:'Zafer yakın: tam havalandırma!',
     pal:['#0b0a26','#2d2a7a','#6f63cf','#c5b8ff'] }
 ];
 const PLAYER_SPD = 38, PLAYER_SPD_FAST = 60, MEGA_SHARE = .12;
@@ -281,8 +282,10 @@ function paintHealthy(L){
   const c = bgCanvas.getContext('2d');
   const img = c.createImageData(HW,HH), d = img.data;
   const warm = L.day >= 7;
-  const air = [hex2rgb('#04141c'), hex2rgb('#0a3140'), hex2rgb(warm?'#12646a':'#105059'),
-               hex2rgb(warm?'#1f8f8a':'#17747a'), hex2rgb('#5fd8cf')];
+  // GOAL-013 (madde 8): reveal edilen doku çok parlak/doygun maviydi, çiçeğin
+  // ortaya çıkışını değersizleştiriyordu — tonlar koyultuldu/yumuşatıldı.
+  const air = [hex2rgb('#030d12'), hex2rgb('#082530'), hex2rgb(warm?'#0d4b4e':'#0b3c40'),
+               hex2rgb(warm?'#156863':'#12564f'), hex2rgb('#3d8f88')];
   const n1 = fbm(HW,HH,60,1777,3), n2 = fbm(HW,HH,14,5051,2);
   const fx = HW*.5, fy = HH*.44, FR = HH*.30;
   for(let y=0;y<HH;y++) for(let x=0;x<HW;x++){
@@ -291,9 +294,9 @@ function paintHealthy(L){
     // sadece prosedürel çiçek/yaprak/sap deseni kaldırıldı — bkz. drawImage aşağıda)
     const vig = clamp(1 - Math.hypot((x/HW-.5)*1.5,(y/HH-.5)*1.6), 0, 1);
     const shaft = sstep(.25,.9, Math.sin((x*.55 + y*1.15)/HW*3.1)*.5+.5);
-    let t = clamp(.12 + n1[i]*.52 + vig*.42 + shaft*.12 + (1-y/HH)*.14, 0, 1);
+    let t = clamp(.10 + n1[i]*.48 + vig*.36 + shaft*.10 + (1-y/HH)*.12, 0, 1);
     let col = ramp(air, t);
-    col = mixc(col, [180,255,250], n2[i]*n2[i]*.10);
+    col = mixc(col, [180,255,250], n2[i]*n2[i]*.05);
     d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3]=255;
   }
   c.putImageData(img,0,0);
@@ -541,7 +544,7 @@ function updateScorePops(dt){
 const G = {
   state:'title', levelIdx:0, level:LEVELS[0],
   score:0, lives:3,
-  px:GW>>1, py:GH-B, frac:0, dir:0,
+  px:GW>>1, py:GH-B, frac:0, dir:0, lastDir:0,
   drawing:false, trail:[], corners:[], startCell:0,
   filled:0, pct:0, dose:60, doseMax:60,
   invuln:0, buffs:{},
@@ -560,7 +563,8 @@ const UI = {
   fill:$('gaugeFill'), goal:$('gaugeGoal'), pct:$('pctRead'),
   score:$('scoreVal'), dose:$('doseFill'), lives:$('lives'), buffs:$('buffs'),
   toast:$('toast'), toastT:$('toast').querySelector('.t'), toastS:$('toast').querySelector('.s'),
-  overlay:$('overlay'), plate:$('plate'), fps:$('fps')
+  overlay:$('overlay'), plate:$('plate'), fps:$('fps'),
+  menuScreen:$('menuScreen'), menuContent:$('menuContent')
 };
 let toastTimer = 0;
 function toast(main, sub){
@@ -570,6 +574,7 @@ function toast(main, sub){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> UI.toast.classList.remove('on'), 1500);
 }
+let doseAlertState = 'ok'; // GOAL-013 (madde 7): eşik geçişlerinde tek seferlik uyarı için
 function syncHUD(){
   const L = G.level;
   UI.day.textContent = String(L.day).padStart(2,'0');
@@ -586,8 +591,21 @@ function syncHUD(){
     ? 'linear-gradient(90deg,#7a1620,#ff4d6d)'
     : 'linear-gradient(90deg,#7a5a12,#ffc24a)';
   UI.dose.style.boxShadow = dr < .25 ? '0 0 12px rgba(255,77,109,.7)' : '0 0 10px rgba(255,194,74,.5)';
+  // GOAL-013 (madde 7): doz kalkanını "rastgele bir çubuk" olmaktan çıkarıp
+  // eşik geçişlerinde fark edilir uyarı vermek — mevcut doz mekaniği değişmedi.
+  const doseWrapEl = document.getElementById('doseWrap');
+  const newDoseState = dr <= .15 ? 'critical' : dr < .30 ? 'warn' : 'ok';
+  if(doseWrapEl){
+    doseWrapEl.classList.toggle('critical', newDoseState === 'critical');
+    doseWrapEl.classList.toggle('warn', newDoseState === 'warn');
+  }
+  if(G.state === 'play' && newDoseState !== doseAlertState){
+    if(newDoseState === 'critical') toast('KALKAN KRİTİK', 'Doz bitmek üzere!');
+    else if(newDoseState === 'warn') toast('Kalkan zayıflıyor', 'Doz %30 altında');
+  }
+  doseAlertState = newDoseState;
   let lv = '';
-  for(let i=0;i<3;i++) lv += '<div class="pip'+(i<G.lives?'':' off')+'"></div>';
+  for(let i=0;i<3;i++) lv += '<img class="heart'+(i<G.lives?'':' off')+'" src="'+healthAssetUrl+'" alt="can">';
   UI.lives.innerHTML = lv;
   let bf = '';
   for(const k in G.buffs){
@@ -605,12 +623,136 @@ UI.overlay.addEventListener('click', e=>{
   Sound.init(); Sound.resume(); Sound.ui();
   doAction(b.dataset.a);
 });
+
+/* GOAL-014: gerçek tam ekran menü sistemi — ana menü/bölümler/yüksek skorlar
+   artık küçük bir kart olarak oyunun ÜSTÜNE binmiyor, ayrı ve opak bir
+   "uygulama ekranı" olarak açılıyor (bkz. #menuScreen, index.html). Pause
+   bilinçli olarak bunun dışında bırakıldı — o zaten oyunun üstüne binen,
+   duraklatılmış oyunu gösteren bir ekran olmalı. */
+function showMenuScreen(html){
+  hidePanel(); // olası açık overlay (pause vb.) ile çakışmasın
+  UI.menuContent.innerHTML = html;
+  UI.menuScreen.classList.add('on');
+  const b = UI.menuContent.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus(), 30);
+}
+function hideMenuScreen(){ UI.menuScreen.classList.remove('on'); }
+UI.menuScreen.addEventListener('click', e=>{
+  const b = e.target.closest('button[data-a]'); if(!b) return;
+  Sound.init(); Sound.resume(); Sound.ui();
+  doAction(b.dataset.a);
+});
+
+/* =========================================================================
+   8b. YÜKSEK SKORLAR (GOAL-013, madde 3) — sadece localStorage, backend yok
+   ========================================================================= */
+const HS_KEY = 'nasodren_highscores_v1';
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function loadHighScores(){
+  try{
+    const raw = localStorage.getItem(HS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
+}
+function saveHighScore(name, score){
+  const list = loadHighScores();
+  list.push({ name, score, day:G.level.day });
+  list.sort((a,b)=>b.score-a.score);
+  list.length = Math.min(list.length, 10);
+  try{ localStorage.setItem(HS_KEY, JSON.stringify(list)); }catch(e){}
+  return list;
+}
+function showHighScores(fromGameOver){
+  const list = loadHighScores();
+  const rows = list.length
+    ? list.map((r,i)=>'<div class="hsRow"><span class="hsRank">'+(i+1)+'</span><span class="hsName">'+escapeHtml(r.name)+'</span><span class="hsScore">'+r.score.toLocaleString('tr-TR')+'</span></div>').join('')
+    : '<p class="lede">Henüz skor yok. İlk sen ol!</p>';
+  // GOAL-014: ayrı, tam ekran "Yüksek Skorlar" ekranı — ister ana menüden
+  // ister oyun-bitti isim girişinden sonra ulaşılsın, aynı ekran.
+  showMenuScreen(
+    `<div class="menuBrand"><div class="kicker">YÜKSEK SKORLAR</div><div class="title">En İyi Tedaviler</div></div>
+     <div class="hsList">${rows}</div>
+     <div class="menuStack">
+       ${fromGameOver ? '<button class="menuBtn primary" data-a="restart">YENİDEN OYNA</button>' : ''}
+       <button class="menuBtn ghost" data-a="mainmenu">◀ ANA MENÜ</button>
+     </div>`);
+}
+function showGameOverNameEntry(){
+  showPanel(
+    `<div class="kicker">TEDAVİ YARIM KALDI</div>
+     <div class="title">Gün ${G.level.day}</div>
+     <div class="stats">
+       <div><span>SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
+       <div><span>TEMİZLENEN</span><b>%${Math.floor(G.pct*100)}</b></div>
+     </div>
+     <p class="lede">Skorunu yüksek skor listesine kaydetmek için adını yaz.</p>
+     <div class="acts">
+       <input id="nameInput" class="nameInput" maxlength="12" placeholder="ADIN">
+       <button class="cta" data-a="submitscore">KAYDET</button>
+     </div>`);
+  setTimeout(()=>{
+    const inp = document.getElementById('nameInput');
+    if(!inp) return;
+    inp.focus();
+    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); doAction('submitscore'); } });
+  }, 40);
+}
+function showMainMenu(){
+  G.state = 'title';
+  // GOAL-014 (madde 1): ana menü artık ayrı, tam ekran bir uygulama ekranı —
+  // dikey OYNA / BÖLÜMLER / YÜKSEK SKORLAR / SES yapısı.
+  showMenuScreen(
+    `<div class="menuBrand">
+       <div class="kicker">NASODREN &nbsp;·&nbsp; SİKLAMEN EKSTRESİ</div>
+       <div class="title">Sinüsleri <em>geri kazan</em>.</div>
+     </div>
+     <div class="menuStack">
+       <button class="menuBtn primary" data-a="start">OYNA</button>
+       <button class="menuBtn" data-a="levels">BÖLÜMLER</button>
+       <button class="menuBtn" data-a="scores">YÜKSEK SKORLAR</button>
+       <button class="menuBtn ghost" data-a="togglesound">${Sound.on ? 'SES: AÇIK' : 'SES: KAPALI'}</button>
+     </div>`);
+}
+function showLevelSelect(){
+  // GOAL-014 (madde 2): ayrı "Bölümler" ekranı — kilit sistemi yok, her gün
+  // doğrudan başlatılabilir. Gameplay/level tasarımına dokunulmadı, sadece
+  // hangi G.levelIdx ile başlanacağını seçtiriyor.
+  const cards = LEVELS.map((L,i) =>
+    `<button class="levelBtn" data-a="pick-${i}">
+       <span class="levelDay">GÜN ${String(L.day).padStart(2,'0')}</span>
+       <span class="levelName">${L.name}</span>
+     </button>`).join('');
+  showMenuScreen(
+    `<div class="menuBrand"><div class="kicker">BÖLÜMLER</div><div class="title">Gün Seç</div></div>
+     <div class="levelGrid">${cards}</div>
+     <div class="menuStack menuBack">
+       <button class="menuBtn ghost" data-a="mainmenu">◀ ANA MENÜ</button>
+     </div>`);
+}
+
 function doAction(a){
-  if(a === 'start' || a === 'restart'){ G.levelIdx = 0; G.score = 0; G.lives = 3; introLevel(); }
+  if(a === 'start' || a === 'restart'){ hideMenuScreen(); G.levelIdx = 0; G.score = 0; G.lives = 3; introLevel(); }
   else if(a === 'go') startLevel();
   else if(a === 'next'){ G.levelIdx++; introLevel(); }
   else if(a === 'retry') startLevel();
   else if(a === 'resume'){ hidePanel(); G.state = 'play'; }
+  else if(a === 'mainmenu') showMainMenu();
+  else if(a === 'levels') showLevelSelect();
+  else if(a === 'scores') showHighScores(false);
+  else if(a === 'togglesound'){ Sound.toggle(); showMainMenu(); }
+  else if(a.indexOf('pick-') === 0){
+    const idx = parseInt(a.slice(5), 10);
+    if(!isNaN(idx) && LEVELS[idx]){ hideMenuScreen(); G.levelIdx = idx; G.score = 0; G.lives = 3; introLevel(); }
+  }
+  else if(a === 'submitscore'){
+    const inp = document.getElementById('nameInput');
+    const name = inp ? inp.value.trim() : '';
+    if(!name){ if(inp){ inp.classList.remove('errorShake'); void inp.offsetWidth; inp.classList.add('errorShake'); inp.focus(); } return; }
+    saveHighScore(name.slice(0,12), G.score);
+    showHighScores(true);
+  }
 }
 $('btnSound').onclick = () => {
   Sound.init(); Sound.resume();
@@ -622,12 +764,17 @@ $('btnPause').onclick = () => togglePause();
 function togglePause(){
   if(G.state === 'play'){
     G.state = 'paused';
+    // GOAL-014 (madde 4): yatay buton sırası yerine dikey, büyük, gerçek
+    // oyun-menüsü hissi veren .menuStack/.menuBtn (ana menüyle aynı bileşen).
     showPanel(
       `<div class="kicker">DURAKLATILDI</div>
        <div class="title">Gün ${G.level.day}</div>
        <p class="lede">${G.level.name} · alanın %${Math.floor(G.pct*100)}’i temizlendi, hedef %${Math.round(G.level.target*100)}.</p>
-       <div class="acts"><button class="cta" data-a="resume">DEVAM ET</button>
-       <button class="ghost" data-a="restart">BAŞA DÖN</button></div>`);
+       <div class="menuStack">
+         <button class="menuBtn primary" data-a="resume">DEVAM ET</button>
+         <button class="menuBtn" data-a="restart">YENİDEN BAŞLAT</button>
+         <button class="menuBtn ghost" data-a="mainmenu">ANA MENÜ</button>
+       </div>`);
   } else if(G.state === 'paused'){ hidePanel(); G.state = 'play'; }
 }
 
@@ -734,7 +881,7 @@ function startLevel(){
   prepareLevel(G.levelIdx);
   rasterRegion(0,0,GW,GH);
   G.filled=0; G.pct=0; G.drawing=false; G.trail=[]; G.corners=[];
-  G.dir=0; G.frac=0; G.px=GW>>1; G.py=GH-B; G.startCell=G.py*GW+G.px;
+  G.dir=0; G.frac=0; G.lastDir=0; G.px=GW>>1; G.py=GH-B; G.startCell=G.py*GW+G.px;
   G.doseMax=L.dose; G.dose=L.dose; G.buffs={}; G.invuln=1.2; G.shake=0;
   particles.length = 0;
   for(let i=0;i<L.bossN;i++) G.bosses.push(spawnBoss(L,i));
@@ -756,15 +903,16 @@ function startLevel(){
 }
 function introLevel(){
   if(G.levelIdx >= LEVELS.length){ winGame(); return; }
+  hideMenuScreen(); // GOAL-014: tam ekran menüden (ana menü/bölümler) geliniyorsa kapat
   const L = LEVELS[G.levelIdx];
   G.state = 'intro';
+  // GOAL-013 (madde 2): uzun tıbbi paragraflar kaldırıldı — tek kısa çengel
+  // cümle (L.med, artık 3-6 kelime) + hedef yüzdesi, 2 saniyede okunabilir.
   showPanel(
-    `<div class="kicker">10 GÜNLÜK KÜR &nbsp;·&nbsp; GÜN ${String(L.day).padStart(2,'0')}</div>
+    `<div class="kicker">GÜN ${String(L.day).padStart(2,'0')} &nbsp;·&nbsp; HEDEF %${Math.round(L.target*100)}</div>
      <div class="title">${L.name}</div>
      <p class="note">${L.med}</p>
-     <p class="lede">Alanın <b style="color:var(--oxygen)">%${Math.round(L.target*100)}</b>’ini sağlıklı dokuya çevir.
-        İltihap odağının bulunduğu bölge kapanmaz — onu köşeye sıkıştır.</p>
-     <div class="acts"><button class="cta" data-a="go">DOZU UYGULA</button></div>`);
+     <div class="acts"><button class="cta" data-a="go">BAŞLA</button></div>`);
 }
 function winGame(){
   G.state = 'won';
@@ -807,18 +955,27 @@ function movePlayer(dt){
   const want = readInput();
   if(want){
     if(G.dir === 0){
-      if(G.drawing && G.corners.length){
-        const lc = G.corners[G.corners.length-1];
-        if(lc.x !== G.px || lc.y !== G.py) G.corners.push({x:G.px, y:G.py});
+      // GOAL-013 (madde 9): yön girdisi kısa süreliğine bırakılıp tam ters yöne
+      // basıldığında (G.dir sıfıra düştüğü an "rev" kontrolü atlanıyordu) oyuncu
+      // kendi tazeçizdiği TRAIL hücresine adım atıp anında ölüyordu. Aşağıdaki
+      // "else if" dalındaki ile AYNI ters-yön engeli burada da uygulanıyor;
+      // gerçek öz-kesişim/kesişme ölümlerine (stepPlayer içindeki TRAIL
+      // kontrolü) hiç dokunulmadı.
+      const revFromRelease = G.drawing && want === OPP[G.lastDir];
+      if(!revFromRelease){
+        if(G.drawing && G.corners.length){
+          const lc = G.corners[G.corners.length-1];
+          if(lc.x !== G.px || lc.y !== G.py) G.corners.push({x:G.px, y:G.py});
+        }
+        G.dir = want; G.frac = 0; G.lastDir = want;
       }
-      G.dir = want; G.frac = 0;
     } else if(want !== G.dir){
       const rev = want === OPP[G.dir];
       if(!(rev && G.drawing)){
         if(G.frac > .5) stepPlayer();
         G.frac = 0;
         if(G.drawing && G.corners.length) G.corners.push({x:G.px, y:G.py});
-        G.dir = want;
+        G.dir = want; G.lastDir = want;
       }
     }
   } else { G.dir = 0; G.frac = 0; }
@@ -947,7 +1104,7 @@ function die(){
   G.lives--; Sound.hit(); G.shake = 14;
   burst(G.px, G.py, 46, 0xff5f8f);
   for(const i of G.trail) cells[i] = EMPTY;
-  G.trail=[]; G.corners=[]; G.drawing=false; G.dir=0; G.frac=0;
+  G.trail=[]; G.corners=[]; G.drawing=false; G.dir=0; G.frac=0; G.lastDir=0;
   G.px = G.startCell % GW; G.py = (G.startCell/GW)|0;
   if(cells[G.startCell] !== FILL){ G.px = GW>>1; G.py = GH-B; }
   G.invuln = 1.8;
@@ -955,16 +1112,9 @@ function die(){
   syncHUD();
   if(G.lives <= 0){
     G.state = 'over';
-    showPanel(
-      `<div class="kicker">TEDAVİ YARIM KALDI</div>
-       <div class="title">Gün ${G.level.day}</div>
-       <p class="lede">Enfeksiyon odağı alanı geri aldı. Kür kesintiye uğradığında semptomlar döner.</p>
-       <div class="stats">
-         <div><span>SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
-         <div><span>TEMİZLENEN</span><b>%${Math.floor(G.pct*100)}</b></div>
-       </div>
-       <div class="acts"><button class="cta" data-a="retry">GÜNÜ TEKRARLA</button>
-       <button class="ghost" data-a="restart">1. GÜNDEN BAŞLA</button></div>`);
+    // GOAL-013 (madde 3): oyun gerçekten sona eriyor — devam etmeden önce
+    // zorunlu isim girişi + localStorage'a skor kaydı isteniyor.
+    showGameOverNameEntry();
     G.lives = 3;
   }
 }
@@ -1245,18 +1395,8 @@ paintTissue(LEVELS[0]);
 rasterRegion(0,0,GW,GH);
 layout();
 syncHUD();
-showPanel(
-  `<div class="kicker">NASODREN &nbsp;·&nbsp; SİKLAMEN EKSTRESİ</div>
-   <div class="title">Sinüsleri <em>geri kazan</em>.</div>
-   <p class="lede">Bir siklamen damlasısın. Tıkalı sinüs boşluğuna girip çizgiyle alan kapatıyorsun;
-      kapattığın her bölge mukustan arınıp oksijenli sağlıklı dokuya dönüşüyor.</p>
-   <div class="keys">
-     <b>OK / WASD</b><span>hareket</span>
-     <b>DOKUNMATİK</b><span>ekranda parmağını sürükle</span>
-     <b>P</b><span>duraklat &nbsp;·&nbsp; F fps</span>
-   </div>
-   <p class="note">Çizgi çizerken hem sen hem arkanda bıraktığın iz savunmasız.
-      Güvenli bölgede beklemek <b>doz kalkanını</b> eritir; kalkan bitince ağrı dalgaları seni orada da vurur.</p>
-   <div class="acts"><button class="cta" data-a="start">TEDAVİYE BAŞLA</button></div>`);
+// GOAL-013 (madde 1): eski büyük tanıtım paneli yerine sade ana menü —
+// oyuncu OYNA / YÜKSEK SKORLAR / SES tek noktadan seçiyor.
+showMainMenu();
 
 };

@@ -33,31 +33,37 @@
   .row{display:flex;align-items:flex-end;gap:14px}
   .lbl{font-size:10px;letter-spacing:.22em;color:var(--muted);line-height:1;margin-bottom:5px;font-weight:600}
   .num{font-size:26px;line-height:.86;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
-  #day .num{color:var(--oxygen);text-shadow:0 0 16px rgba(53,224,216,.55)}
+  #day .num{color:var(--oxygen);text-shadow:0 0 16px rgba(53,224,216,.55);font-size:32px}
   #scoreBox{margin-left:auto;text-align:right}
   #scoreBox .num{color:var(--bone)}
   #stage{flex:1;min-width:0}
-  #stageName{font-size:13px;letter-spacing:.19em;font-weight:600;color:var(--bone);
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:7px;opacity:.9}
+  #stageName{font-size:16px;letter-spacing:.14em;font-weight:700;color:var(--bone);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:7px;opacity:1;
+    text-shadow:0 0 10px rgba(238,247,249,.25)}
   .gauge{position:relative;height:4px;background:rgba(255,255,255,.08)}
   .gauge>span{position:absolute;left:0;top:0;bottom:0;width:0;
     background:linear-gradient(90deg,var(--oxygen-deep),var(--oxygen));
     box-shadow:0 0 12px rgba(53,224,216,.75);transition:width .22s cubic-bezier(.2,.8,.3,1)}
   .gauge>i{position:absolute;top:-5px;bottom:-5px;width:1px;background:var(--bone);opacity:.6}
-  #pctRead{font-size:12px;letter-spacing:.12em;color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums}
-  #pctRead b{color:var(--oxygen);font-weight:700}
-  #pctRead.met b{color:#9df58a}
+  #pctRead{font-size:13px;letter-spacing:.1em;color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums}
+  #pctRead b{color:var(--oxygen);font-weight:700;font-size:16px;text-shadow:0 0 12px rgba(53,224,216,.5)}
+  #pctRead.met b{color:#9df58a;text-shadow:0 0 12px rgba(157,245,138,.6)}
 
   #sub{display:flex;align-items:center;gap:16px;margin-top:11px}
   #doseWrap{width:96px}
+  #doseWrap .lbl{transition:color .2s}
+  #doseWrap.warn .lbl{color:#ffb347;animation:doseWarnPulse 1.1s ease-in-out infinite}
+  #doseWrap.critical .lbl{color:#ff4d6d;animation:doseCritPulse .55s ease-in-out infinite}
+  @keyframes doseWarnPulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes doseCritPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.08)}}
   #dose{position:relative;height:3px;background:rgba(255,255,255,.08)}
   #dose>span{position:absolute;inset:0 auto 0 0;width:100%;
     background:linear-gradient(90deg,#7a5a12,#ffc24a);box-shadow:0 0 10px rgba(255,194,74,.5)}
-  #lives{display:flex;gap:6px}
-  .pip{width:9px;height:13px;background:var(--cyclamen);
-    clip-path:polygon(50% 0,100% 58%,74% 100%,26% 100%,0 58%);
-    box-shadow:0 0 12px rgba(255,77,157,.6)}
-  .pip.off{background:rgba(255,255,255,.13);box-shadow:none}
+  #lives{display:flex;gap:5px;align-items:center}
+  .heart{width:16px;height:16px;object-fit:contain;
+    filter:drop-shadow(0 0 6px rgba(255,77,157,.65));transition:opacity .2s,filter .2s}
+  .heart.off{opacity:.16;filter:grayscale(1) brightness(.7);
+    filter:grayscale(1) brightness(.7) drop-shadow(0 0 0 transparent)}
   #buffs{display:flex;gap:7px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
   .buff{font-size:10px;letter-spacing:.14em;font-weight:600;padding:4px 9px 3px;color:var(--oxygen);
     border:1px solid rgba(53,224,216,.4);background:rgba(53,224,216,.08);white-space:nowrap;
@@ -75,6 +81,39 @@
   #overlay{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;padding:22px;
     background:linear-gradient(180deg,rgba(6,13,20,.9),rgba(4,9,13,.94))}
   #overlay.on{display:flex}
+
+  /* ---------- GOAL-014: gerçek tam ekran oyun menüsü (ana menü / bölümler /
+     yüksek skorlar) — oyunun kendisinden tamamen ayrı, opak bir "uygulama
+     ekranı" gibi davranır; HUD/canvas hiç sızmaz. Pause bilerek bunun dışında,
+     çünkü duraklatma zaten oyunun üstüne binen bir ekran olmalı. */
+  #menuScreen{position:fixed;inset:0;z-index:8;display:none;flex-direction:column;
+    align-items:center;justify-content:center;padding:32px 20px;overflow-y:auto;
+    background:
+      radial-gradient(120% 90% at 50% 8%, rgba(53,224,216,.08), transparent 60%),
+      linear-gradient(180deg,#0a161f 0%,#060d14 55%,#03070b 100%)}
+  #menuScreen.on{display:flex}
+  .menuBrand{text-align:center;margin-bottom:44px}
+  .menuStack{display:flex;flex-direction:column;gap:14px;width:min(360px,88vw)}
+  .menuBtn{padding:20px 26px;font-size:15px;font-weight:700;letter-spacing:.16em;text-align:center;
+    background:rgba(255,255,255,.045);border:1px solid rgba(53,224,216,.28);color:var(--bone);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%);
+    transition:transform .12s ease,border-color .15s,background .15s}
+  .menuBtn:hover{border-color:var(--oxygen);background:rgba(53,224,216,.09);transform:translateY(-2px)}
+  .menuBtn:active{transform:translateY(0)}
+  .menuBtn.primary{background:linear-gradient(100deg,var(--oxygen),#7bf0e6);color:#04191c;
+    border:none;font-size:17px;padding:23px 26px}
+  .menuBtn.ghost{background:none;border-color:rgba(255,255,255,.16);color:var(--muted);
+    font-size:12.5px;padding:15px 22px}
+  .menuBack{margin-top:26px}
+  .levelGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;
+    width:min(680px,92vw);max-height:52vh;overflow-y:auto;padding:6px;margin-bottom:8px}
+  .levelBtn{display:flex;flex-direction:column;gap:7px;padding:16px 15px;text-align:left;
+    background:rgba(255,255,255,.045);border:1px solid rgba(53,224,216,.22);color:var(--bone);
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%);
+    transition:border-color .15s,background .15s}
+  .levelBtn:hover{border-color:var(--oxygen);background:rgba(53,224,216,.09)}
+  .levelDay{font-size:11px;letter-spacing:.2em;color:var(--oxygen);font-weight:700}
+  .levelName{font-size:13px;font-weight:600;line-height:1.3}
   .plateEdge{width:min(520px,100%);background:linear-gradient(150deg,var(--oxygen),rgba(53,224,216,.25) 45%,rgba(255,77,157,.5));
     clip-path:polygon(0 var(--cut),var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%);
     filter:drop-shadow(0 22px 48px rgba(0,0,0,.65))}
@@ -95,6 +134,18 @@
   .keys b{color:var(--oxygen);font-weight:600;letter-spacing:.1em;font-size:11px}
   .acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+  .nameInput{font:inherit;padding:13px 16px;font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--bone);background:rgba(255,255,255,.06);border:1px solid rgba(53,224,216,.35);
+    outline:none;min-width:160px}
+  .nameInput:focus{border-color:var(--oxygen)}
+  .nameInput.errorShake{animation:inputShake .32s}
+  @keyframes inputShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+  .hsList{margin-bottom:20px;max-height:260px;overflow-y:auto}
+  .hsRow{display:flex;align-items:center;gap:12px;padding:8px 0;
+    border-bottom:1px solid rgba(255,255,255,.07);font-variant-numeric:tabular-nums}
+  .hsRank{width:22px;color:var(--muted);font-weight:700;font-size:12px}
+  .hsName{flex:1;font-weight:600;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hsScore{color:var(--oxygen);font-weight:700}
   .cta{padding:14px 30px 13px;font-size:13px;font-weight:700;letter-spacing:.2em;color:#04191c;
     background:linear-gradient(100deg,var(--oxygen),#7bf0e6);
     clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%);
@@ -157,6 +208,7 @@
   </div>
   <div id="fps"></div>
   <div id="overlay"><div class="plateEdge"><div class="plate" id="plate"></div></div></div>
+  <div id="menuScreen"><div id="menuContent"></div></div>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

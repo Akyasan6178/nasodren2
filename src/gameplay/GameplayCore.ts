@@ -26,6 +26,8 @@ import * as PIXI from 'pixi.js';
 import playerAssetUrl from '../../assets/siklament.png';   // oyuncu sprite'ı
 import bossAssetUrl from '../../assets/bacteria.png';      // boss sprite'ı
 import bgFlowerAssetUrl from '../../assets/siclament.png'; // arka planda açığa çıkan büyük siklamen
+import minionFlagellaAssetUrl from '../../assets/minion_flagella.png'; // kind:0 minion
+import minionSporeAssetUrl from '../../assets/minion_spore.png';       // kind:1 minion
 
 export async function startGame(){
 "use strict";
@@ -239,40 +241,8 @@ function texRadial(size, stops){
 /* GOAL-009: oyuncu ve boss artık gerçek PNG assetlerinden (bkz. texFromImage
    + loadImage, TEX nesnesi kurulumu) — eski prosedürel texPlayer()/texBoss()
    kaldırıldı. */
-function texMinion(kind){
-  const S = 96, cv = makeCanvas(S,S), c = cv.getContext('2d');
-  const img = c.createImageData(S,S), d = img.data, m = (S-1)/2;
-  const n = fbm(S,S,20,kind?771:313,2);
-  const cols = kind
-    ? [hex2rgb('#3d2c05'),hex2rgb('#9c7a14'),hex2rgb('#e3c33a'),hex2rgb('#fff3c2')]
-    : [hex2rgb('#14330a'),hex2rgb('#3f7a1c'),hex2rgb('#8ede3a'),hex2rgb('#e4ffbb')];
-  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
-    const i = y*S+x, dx = x-m, dy = y-m;
-    const a = Math.atan2(dy,dx);
-    let dist, r;
-    if(kind === 0){ dist = Math.hypot(dx/1.35, dy); r = m*.62; }
-    else { dist = Math.hypot(dx,dy); r = m*(.62 + Math.sin(a*4)*.10 + (n[i]-.5)*.14); }
-    const edge = sstep(r, r-2.2, dist);
-    if(edge <= 0) continue;
-    const q = clamp(dist/r,0,1);
-    let t = (1-q)*.8 + (n[i]-.5)*.3 + (-dy/r)*.18;
-    let col = ramp(cols, clamp(t,0,1));
-    if(q > .82) col = mixc(col, cols[3], sstep(.82,1,q)*.4);
-    d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3] = 255*edge;
-  }
-  c.putImageData(img,0,0);
-  if(kind === 0){                              // kirpikler
-    c.strokeStyle = 'rgba(160,230,90,.55)'; c.lineWidth = 2.5; c.lineCap = 'round';
-    for(let k=0;k<10;k++){
-      const a = k/10*Math.PI*2;
-      c.beginPath();
-      c.moveTo(m+Math.cos(a)*m*.56, m+Math.sin(a)*m*.44);
-      c.lineTo(m+Math.cos(a)*m*.82, m+Math.sin(a)*m*.7);
-      c.stroke();
-    }
-  }
-  return texFromCanvas(cv);
-}
+/* GOAL-012: minion'lar artık gerçek PNG assetlerinden (bkz. texFromImage +
+   loadImage, TEX.mini kurulumu) — eski prosedürel texMinion() kaldırıldı. */
 function texPowerup(meta){
   const S = 96, cv = makeCanvas(S,S), c = cv.getContext('2d');
   const m = S/2, R = S*.38;
@@ -415,10 +385,13 @@ document.getElementById('app').insertBefore(view, document.getElementById('vig')
 
 /* GOAL-009: gerçek assetler — PIXI kurulumundan hemen sonra, TEX nesnesinden
    önce yükleniyor ki texFromImage() çağrıldığında görsel hazır olsun. */
-const [playerImg, bossImg, bgFlowerImg] = await Promise.all([
-  loadImage(playerAssetUrl), loadImage(bossAssetUrl), loadImage(bgFlowerAssetUrl)
+const [playerImg, bossImg, bgFlowerImg, minionFlagellaImg, minionSporeImg] = await Promise.all([
+  loadImage(playerAssetUrl), loadImage(bossAssetUrl), loadImage(bgFlowerAssetUrl),
+  loadImage(minionFlagellaAssetUrl), loadImage(minionSporeAssetUrl)
 ]);
 const PLAYER_AR = playerImg.height / playerImg.width; // en-boy oranı korunsun diye
+// GOAL-012: minion assetleri kare olmayabilir; her tür için ayrı en-boy oranı
+const MINI_AR = [minionFlagellaImg.height / minionFlagellaImg.width, minionSporeImg.height / minionSporeImg.width];
 
 const bootEl = document.getElementById('boot'); if(bootEl) bootEl.remove();
 
@@ -494,7 +467,7 @@ const TEX = {
   spark:  texRadial(64,  [[0,'rgba(255,255,255,1)'],[.4,'rgba(255,255,255,.6)'],[1,'rgba(255,255,255,0)']]),
   player: texFromImage(playerImg),
   boss:   texFromImage(bossImg),
-  mini:   [texMinion(0), texMinion(1)],
+  mini:   [texFromImage(minionFlagellaImg), texFromImage(minionSporeImg)],
   pu:     PU_META.map(texPowerup),
   grain:  texGrain()
 };
@@ -732,7 +705,7 @@ function spawnBoss(L, idx){
 function spawnMinion(L){
   const a = rnd(0,7), d = rnd(GH*.12, GH*.4), kind = Math.random()<.55?0:1;
   const s = new PIXI.Sprite(TEX.mini[kind]);
-  s.anchor.set(.5); s.width = s.height = 30;
+  s.anchor.set(.5); s.width = 30; s.height = 30 * MINI_AR[kind]; // GOAL-012: en-boy oranı korunuyor, görünür boyut hissi (30) aynı
   layerEnt.addChild(s);
   return { x:clamp(GW/2+Math.cos(a)*d*1.4, B+4, GW-B-4), y:clamp(GH/2+Math.sin(a)*d, B+4, GH-B-4),
            vx:Math.cos(a*2.3)*L.miniSpd, vy:Math.sin(a*1.7)*L.miniSpd,

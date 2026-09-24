@@ -451,35 +451,9 @@ function texWind(){
    kırmızı hava noktaları anlatıyordu; sürekli hareket ekranı yoruyordu ve
    "gidemiyor" mesajı ancak izlerseniz okunuyordu. Yerine herkesin tanıdığı
    tek bir simge: daire içinde çapraz çizgi. */
-function texBlocked(){
-  const S = 128, cv = makeCanvas(S,S), c = cv.getContext('2d');
-  c.strokeStyle = '#fff'; c.lineCap = 'round'; c.lineWidth = 10;
-  c.beginPath(); c.arc(S/2,S/2,S*.31,0,7); c.stroke();
-  const r = S*.31*.72;
-  c.beginPath(); c.moveTo(S/2-r,S/2-r); c.lineTo(S/2+r,S/2+r); c.stroke();
-  return texFromCanvas(cv);
-}
-function texGust(){
-  const W = 256, H = 96, cv = makeCanvas(W,H), c = cv.getContext('2d');
-  c.strokeStyle = '#fff'; c.lineCap = 'round'; c.lineWidth = 9;
-  c.globalAlpha = .9;
-  c.beginPath();
-  c.moveTo(8,H*.5);
-  c.bezierCurveTo(W*.45,H*.34, W*.66,H*.30, W*.80,H*.40);
-  c.bezierCurveTo(W*.95,H*.50, W*.90,H*.76, W*.72,H*.72);
-  c.stroke();
-  return texFromCanvas(cv);
-}
-
-/* GOAL-015: hava giriş/çıkış portlarının halkası */
-function texRing(){
-  const S = 128, cv = makeCanvas(S,S), c = cv.getContext('2d');
-  c.strokeStyle = '#fff';
-  c.lineWidth = 7; c.beginPath(); c.arc(S/2,S/2,S*.32,0,7); c.stroke();
-  c.lineWidth = 2; c.globalAlpha = .55;
-  c.beginPath(); c.arc(S/2,S/2,S*.45,0,7); c.stroke();
-  return texFromCanvas(cv);
-}
+/* GOAL-028: burada texBlocked(), texGust() ve texRing() vardı; üçü de yalnızca
+   port halkaları, tıkanma simgesi ve rota boyunca akan esinti içindi. Nefes
+   noktasal olmaktan çıkınca üçü de karşılıksız kaldı. */
 function texGrain(){
   const S = 256, cv = makeCanvas(S,S), c = cv.getContext('2d');
   const img = c.createImageData(S,S), d = img.data;
@@ -580,26 +554,9 @@ function motifAirflow(c,k){             // gün 8-10: serbest hava akımı
 }
 const MOTIFS = { congestion:motifCongestion, mucus:motifMucus, cilia:motifCilia, airflow:motifAirflow };
 
-/* Havanın geçmesi gereken kanal, dokuya işlenmiş bir parıltı olarak.
-   Sadece temizlediğin yerde görünür — yani doğru yeri açtıkça "kanal"
-   kendini gösterir, yanlış yeri açtığında görünmez. Sessiz bir pusula. */
-function paintDuct(c){
-  if(cavRoute.length < 2) return;
-  c.save();
-  c.globalCompositeOperation = 'lighter';
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  const passes = [[34,'rgba(64,214,222,.045)'],[18,'rgba(120,240,238,.065)'],[7,'rgba(206,255,252,.085)']];
-  for(const [w,col] of passes){
-    c.lineWidth = w; c.strokeStyle = col;
-    c.beginPath();
-    for(let i=0;i<cavRoute.length;i+=3){
-      const cel = cavRoute[i], x = ((cel%GW)+.5)*SC, y = (((cel/GW)|0)+.5)*SC;
-      if(i === 0) c.moveTo(x,y); else c.lineTo(x,y);
-    }
-    c.stroke();
-  }
-  c.restore();
-}
+/* GOAL-028: burada eskiden paintDuct() vardı — burun deliğinden ostiuma giden
+   sabit rotayı dokuya bir parıltı olarak işliyordu. Nefes artık noktadan
+   noktaya değil bütün boşluktan geçtiği için izlenecek tek bir rota da yok. */
 
 /* =========================================================================
    BİLGİ LEVHASI (GOAL-017)
@@ -980,8 +937,6 @@ function paintHealthy(L){
       motif(c, k); motif(c, k);
     }
   }
-  paintDuct(c);
-
   // GOAL-017: siklamenin yerini günün mekanizmasını anlatan bilgi levhası aldı
   paintPlate(c, L);
 }
@@ -1016,19 +971,18 @@ function paintTissue(L){
    Şekiller canvas ile, ızgara biriminde çiziliyor; beyaz = boşluk, siyah =
    duvar. Yeni bir kesit eklemek birkaç satırlık path işi.
 
-   Her kesitin iki portu var:
-     in  — burun deliği (hava girişi; oyuncunun da başlangıç noktası)
-     out — ostium / nazofarenks (hava çıkışı)
-   Nefes mekaniği bu iki port arasında TEMİZLENMİŞ hücrelerden geçen bir yol
-   arıyor (bkz. computeAirway). Yani hedef yüzdesi "ne kadar temizledin"i,
-   hava yolu "doğru yeri mi temizledin"i ölçüyor.
+   GOAL-028: kesitlerin eskiden iki portu vardı (burun deliği / ostium) ve
+   nefes o iki nokta arasında yol arıyordu. Artık port yok: nefes boşluğun
+   tamamından, aşağıdan yukarı geçmeye çalışıyor (bkz. computeBreath). Yani
+   hedef yüzdesi "ne kadar temizledin"i, nefes de "dokuyu ne kadar açtın"ı
+   ölçüyor. Kesit tanımlarındaki in/out alanları artık okunmuyor.
    ========================================================================= */
 const cavity  = new Uint8Array(GW*GH);   // 1 = oynanabilir boşluk
 const cavSoft = new Float32Array(HW*HH); // görsel duvar için yumuşatılmış maske
 let cavCount = 0, cavCX = GW/2, cavCY = GH/2;
-const PORTC = { in:{x:GW>>1,y:GH-8,r:5}, out:{x:GW>>1,y:8,r:5} };
-const portOutMask = new Uint8Array(GW*GH);
-let portIn = [], portOut = [], airBaseD = 1;
+/* GOAL-029: nefesin yayılması için çalışma dizileri (bkz. computeBreath). */
+const bfsQ    = new Int32Array(GW*GH);
+const bfsSeen = new Uint8Array(GW*GH);
 
 const CAVITY = {
   /* -------------------------------------------------------------------------
@@ -1177,80 +1131,44 @@ const shapeCv = makeCanvas(HW,HH), shapeCtx = shapeCv.getContext('2d');
 /* Boşluğa ulaşılamayan cepleri duvara çevirir. Şekiller elle çizildiği için
    bir oda yanlışlıkla mühürlenirse alan hedefi imkânsız hale gelirdi; bu ağ
    onu sessizce kapatır, bölüm her zaman tamamlanabilir kalır. */
+/* GOAL-028: kesit ızgaraya düşerken kopan küçük odalar mühürlenir. Eskiden
+   tohum burun deliğiydi; port kalmadığı için artık EN BÜYÜK bağlı parça
+   tutuluyor, geri kalanı kemiğe dönüyor. Sonuç aynı (tek parça oynanabilir
+   alan) ama hiçbir sabit noktaya bağlı değil. */
 function sealUnreachable(){
-  const seen = new Uint8Array(GW*GH), q = new Int32Array(GW*GH);
-  let qh = 0, qt = 0, seed = -1;
-  const si = PORTC.in.y*GW + PORTC.in.x;
-  if(cavity[si]) seed = si;
-  else for(let i=cavity.length-1;i>=0;i--) if(cavity[i]){ seed = i; break; }
-  if(seed < 0) return;
-  PORTC.in.x = seed % GW; PORTC.in.y = (seed/GW)|0;
-  seen[seed] = 1; q[qt++] = seed;
-  while(qh < qt){
-    const i = q[qh++], x = i%GW, y = (i/GW)|0;
-    if(x>0    && cavity[i-1]  && !seen[i-1] ){ seen[i-1]  = 1; q[qt++] = i-1; }
-    if(x<GW-1 && cavity[i+1]  && !seen[i+1] ){ seen[i+1]  = 1; q[qt++] = i+1; }
-    if(y>0    && cavity[i-GW] && !seen[i-GW]){ seen[i-GW] = 1; q[qt++] = i-GW; }
-    if(y<GH-1 && cavity[i+GW] && !seen[i+GW]){ seen[i+GW] = 1; q[qt++] = i+GW; }
-  }
-  for(let i=0;i<cavity.length;i++) if(cavity[i] && !seen[i]) cavity[i] = 0;
-}
-
-function collectPort(p, arr, mask){
-  for(let y=p.y-p.r;y<=p.y+p.r;y++) for(let x=p.x-p.r;x<=p.x+p.r;x++){
-    if(x<0||y<0||x>=GW||y>=GH) continue;
-    const dx = x-p.x, dy = y-p.y;
-    if(dx*dx+dy*dy > p.r*p.r) continue;
-    const i = y*GW+x;
-    if(!cavity[i]) continue;
-    arr.push(i); if(mask) mask[i] = 1;
-  }
-}
-function buildPorts(){
-  portIn = []; portOut = []; portOutMask.fill(0);
-  collectPort(PORTC.in, portIn, null);
-  collectPort(PORTC.out, portOut, portOutMask);
-  if(!portOut.length){                     // güvenlik ağı: en üstteki boşluğa taşı
-    for(let i=0;i<cavity.length;i++) if(cavity[i]){ PORTC.out.x = i%GW; PORTC.out.y = (i/GW)|0; break; }
-    collectPort(PORTC.out, portOut, portOutMask);
-  }
-  if(!portIn.length) collectPort(PORTC.in, portIn, null);
-  airBaseD = Math.max(1, Math.hypot(PORTC.in.x-PORTC.out.x, PORTC.in.y-PORTC.out.y));
-}
-
-/* GOAL-016: burun deliğinden ostiuma, boşluk içinden geçen EN KISA yol.
-   Temizlenmiş hücrelere değil, kesitin kendisine bakar — yani "havanın
-   geçmesi gereken yer" hiç değişmeyen bir gerçek. Hem arka plana kanal
-   parıltısı olarak boyanıyor hem de oyun içi yol göstergesi bunu izliyor. */
-let cavRoute = [];
-function buildRoute(){
-  cavRoute = [];
-  const from = new Int32Array(GW*GH).fill(-2), q = new Int32Array(GW*GH);
-  let qh = 0, qt = 0;
-  const si = PORTC.in.y*GW + PORTC.in.x;
-  if(!cavity[si]) return;
-  from[si] = -1; q[qt++] = si;
-  while(qh < qt){
-    const i = q[qh++], x = i%GW, y = (i/GW)|0;
-    let n;
-    n = i-1;  if(x>0    && cavity[n] && from[n]===-2){ from[n]=i; q[qt++]=n; }
-    n = i+1;  if(x<GW-1 && cavity[n] && from[n]===-2){ from[n]=i; q[qt++]=n; }
-    n = i-GW; if(y>0    && cavity[n] && from[n]===-2){ from[n]=i; q[qt++]=n; }
-    n = i+GW; if(y<GH-1 && cavity[n] && from[n]===-2){ from[n]=i; q[qt++]=n; }
-  }
-  let goal = PORTC.out.y*GW + PORTC.out.x;
-  if(from[goal] === -2){                       // port merkezi duvara denk geldiyse
-    let bd = Infinity;
-    for(let k=0;k<portOut.length;k++){
-      const c2 = portOut[k];
-      if(from[c2] === -2) continue;
-      const dx = (c2%GW)-PORTC.out.x, dy = ((c2/GW)|0)-PORTC.out.y, d = dx*dx+dy*dy;
-      if(d < bd){ bd = d; goal = c2; }
+  const comp = new Int32Array(GW*GH).fill(-1), q = new Int32Array(GW*GH);
+  let id = 0, best = -1, bestN = 0;
+  for(let start=0;start<cavity.length;start++){
+    if(!cavity[start] || comp[start] >= 0) continue;
+    let qh = 0, qt = 0, cnt = 0;
+    comp[start] = id; q[qt++] = start;
+    while(qh < qt){
+      const i = q[qh++], x = i%GW, y = (i/GW)|0; cnt++;
+      if(x>0    && cavity[i-1]  && comp[i-1]  < 0){ comp[i-1]  = id; q[qt++] = i-1; }
+      if(x<GW-1 && cavity[i+1]  && comp[i+1]  < 0){ comp[i+1]  = id; q[qt++] = i+1; }
+      if(y>0    && cavity[i-GW] && comp[i-GW] < 0){ comp[i-GW] = id; q[qt++] = i-GW; }
+      if(y<GH-1 && cavity[i+GW] && comp[i+GW] < 0){ comp[i+GW] = id; q[qt++] = i+GW; }
     }
-    if(from[goal] === -2) return;
+    if(cnt > bestN){ bestN = cnt; best = id; }
+    id++;
   }
-  for(let i=goal;i>=0;i=from[i]){ cavRoute.push(i); if(cavRoute.length > GW*GH) break; }
-  cavRoute.reverse();
+  if(best < 0) return;
+  for(let i=0;i<cavity.length;i++) if(cavity[i] && comp[i] !== best) cavity[i] = 0;
+}
+
+/* Kesitin her satırında kaç boşluk hücresi var — nefesin karşılaşacağı
+   kesit alanı. Kesit değiştiğinde bir kez ölçülüyor. */
+/* Boşluğun en üst ve en alt satırı. Nefes aşağıdan girip yukarı çıktığı için
+   yükseklik yüzdesi bu iki sınıra göre hesaplanıyor. */
+function measureRows(){
+  let y0 = -1, y1 = -1;
+  for(let y=0;y<GH;y++){
+    const row = y*GW; let k = 0;
+    for(let x=0;x<GW;x++) if(cavity[row+x]){ k = 1; break; }
+    if(k){ if(y0 < 0) y0 = y; y1 = y; }
+  }
+  breath.y0 = y0 < 0 ? 0 : y0;
+  breath.y1 = y1 < 0 ? GH-1 : y1;
 }
 
 function buildCavity(L){
@@ -1285,12 +1203,8 @@ function buildCavity(L){
     const px = Math.min(HW-1, ((x+.5)*SC)|0), py = Math.min(HH-1, ((y+.5)*SC)|0);
     if(raw[(py*HW+px)*4] > 127) cavity[y*GW+x] = 1;
   }
-  const mx = v => mir ? GW - v : v;        // portlar da aynalanıyor
-  PORTC.in  = { x:mx(spec.in.x),  y:spec.in.y,  r:spec.in.r  };
-  PORTC.out = { x:mx(spec.out.x), y:spec.out.y, r:spec.out.r };
   sealUnreachable();
-  buildPorts();
-  buildRoute();
+  measureRows();   // GOAL-028: nefesin okuyacağı satır kesitleri
 
   cavCount = 0;
   let sx = 0, sy = 0, bx0 = GW, by0 = GH, bx1 = 0, by1 = 0;
@@ -1366,14 +1280,25 @@ function randomCavityCell(pad){
     }
     if(ok) return { x:x, y:y, i:i };
   }
-  return { x:PORTC.in.x, y:PORTC.in.y, i:PORTC.in.y*GW+PORTC.in.x };
+  const cx = clamp(Math.round(cavCX), 0, GW-1), cy = clamp(Math.round(cavCY), 0, GH-1);
+  return { x:cx, y:cy, i:cy*GW+cx };
 }
 
-/* Oyuncunun başlangıcı: burun deliğinin hemen altındaki duvar (kalıcı FILL). */
+/* GOAL-028: oyuncunun başlangıcı. Eskiden burun deliği portunun dibiydi; port
+   kalmayınca boşluğun en alt sırasında yatayda merkeze en yakın noktanın
+   altındaki duvara oturuyor. Nefes de aşağıdan yukarı ilerlediği için oyuncu
+   havayla aynı yerden yola çıkıyor. */
 function playerStart(){
-  const p = PORTC.in;
-  for(let y=p.y;y<GH;y++) if(!cavity[y*GW+p.x]) return { x:p.x, y:y };
-  return { x:GW>>1, y:GH-B };
+  let by = -1;
+  for(let y=GH-1;y>=0 && by<0;y--)
+    for(let x=0;x<GW;x++) if(cavity[y*GW+x]){ by = y; break; }
+  if(by < 0) return { x:GW>>1, y:GH-B };
+  let bx = GW>>1, bd = Infinity;
+  for(let x=0;x<GW;x++) if(cavity[by*GW+x]){
+    const d = Math.abs(x-cavCX); if(d < bd){ bd = d; bx = x; }
+  }
+  for(let y=by;y<GH;y++) if(!cavity[y*GW+bx]) return { x:bx, y:y };
+  return { x:bx, y:GH-B };
 }
 
 /* ---- kemik/kıkırdak duvar dokusu ---- */
@@ -1553,10 +1478,7 @@ const TEX = {
   boss:   texFromImage(bossImg),
   mini:   [texFromImage(minionFlagellaImg), texFromImage(minionSporeImg)],
   pu:     PU_META.map(texPowerup),
-  ring:   texRing(),
   wind:   texWind(),
-  gust:   texGust(),
-  blocked:texBlocked(),
   grain:  texGrain()
 };
 
@@ -1565,58 +1487,27 @@ grainSprite.width = PFW*1.2; grainSprite.height = PFH*1.2;
 grainSprite.blendMode = BLEND_ADD; grainSprite.alpha = .055;
 layerGrain.addChild(grainSprite);
 
-/* GOAL-015: portlar her zaman görünür — oyuncunun "nereyi nereye bağlayacağım"
-   sorusuna bakışta cevap veren tek işaret bunlar. */
-function makePortFX(tint){
-  const g = new PIXI.Sprite(TEX.glow);
-  g.anchor.set(.5); g.blendMode = BLEND_ADD; g.tint = tint; g.alpha = .2;
-  const r = new PIXI.Sprite(TEX.ring);
-  r.anchor.set(.5); r.blendMode = BLEND_ADD; r.tint = tint; r.alpha = .6;
-  layerLight.addChild(g, r);
-  return { g:g, r:r };
-}
-
-const portInFX  = makePortFX(0x7fe4ff);   // burun deliği — hava girişi
-const portOutFX = makePortFX(0x9ef05a);   // ostium — hava çıkışı
-
-/* Hava yolunun durumunu sahada gösteren parçalar:
-     blockRing — havanın takıldığı noktadaki "tıkalı" simgesi
-     portLabel — ilk günlerde portların ne olduğunu yazan etiketler
-   GOAL-019: kanal kapalıyken sahada hareketli hiçbir işaret yok. Yürüyen
-   noktalar da, duvara çarpan hava da kaldırıldı; kalıcı bir olumsuz durumu
-   tekrar eden hareketle anlatmak yorucu oluyordu. Hareket artık yalnızca
-   akan havaya ait, yani ekranda bir şey kıpırdıyorsa hava geçiyor demek. */
-const blockRing = new PIXI.Sprite(TEX.blocked);
-blockRing.anchor.set(.5); blockRing.blendMode = BLEND_ADD; blockRing.tint = 0xff6a72;
-const blockGlow = new PIXI.Sprite(TEX.glow);
-blockGlow.anchor.set(.5); blockGlow.blendMode = BLEND_ADD; blockGlow.tint = 0xff4d6d; blockGlow.alpha = .25;
-layerLight.addChild(blockGlow, blockRing);
-
-/* GOAL-019: kanal AÇILDIKTAN sonra rota boyunca yanan yumuşak ışık.
-   Kanal kapalıyken sahada hiç hareketli nokta yok — tıkanıklığı tek simge ve
-   HUD çubuğu anlatıyor, ekran sakin kalıyor. Kanal açılınca bu ışık zinciri
-   yanıyor ve üzerinden bir parlaklık dalgası geçiyor; büyük ve iç içe geçtiği
-   için nokta dizisi değil, ışıyan bir boru gibi okunuyor. */
-const channelGlow = pool(layerLight, ()=>{ const s = new PIXI.Sprite(TEX.glow);
-  s.anchor.set(.5); s.blendMode = BLEND_ADD; s.tint = 0x6fe8e0; return s; }, 34);
-
-function texLabel(text){
-  const cv = makeCanvas(320,54), c = cv.getContext('2d');
-  c.font = '700 24px "Segoe UI","Noto Sans",Helvetica,Arial,sans-serif';
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.shadowColor = 'rgba(0,0,0,.9)'; c.shadowBlur = 8;
-  c.fillStyle = '#eafcff';
-  c.fillText(text, 160, 27);
+/* GOAL-028: NEFES DALGASI
+   Sahada artık "HAVA GİRİŞİ" / "OSTIUM ÇIKIŞI" halkaları ve etiketleri yok.
+   Yerlerini, her nefes denemesinde bütün sahayı alttan yukarı tarayan tek bir
+   yatay bant aldı. Bandın nereye kadar çıkabildiği tıkanıklığın nerede
+   olduğunu söylüyor: oyuncu HUD'a bakmadan, dokunun kendisinde görüyor.
+   Geçerken turkuaz, tıkandığı yerde kırmızıya dönüp sönüyor. */
+function texBand(){
+  const W = 8, H = 128, cv = makeCanvas(W,H), c = cv.getContext('2d');
+  const g = c.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,   'rgba(255,255,255,0)');
+  g.addColorStop(.40, 'rgba(255,255,255,.30)');
+  g.addColorStop(.50, 'rgba(255,255,255,1)');
+  g.addColorStop(.60, 'rgba(255,255,255,.30)');
+  g.addColorStop(1,   'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(0,0,W,H);
   return texFromCanvas(cv);
 }
-function makeLabel(text){
-  const s = new PIXI.Sprite(texLabel(text));
-  s.anchor.set(.5); s.width = 150; s.height = 25;
-  layerLight.addChild(s);
-  return s;
-}
-const labelIn  = makeLabel('HAVA GİRİŞİ');
-const labelOut = makeLabel('OSTIUM ÇIKIŞI');
+const waveBand = new PIXI.Sprite(texBand());
+waveBand.anchor.set(.5); waveBand.x = PFW/2; waveBand.width = PFW;
+waveBand.blendMode = BLEND_ADD; waveBand.alpha = 0;
+layerLight.addChild(waveBand);
 
 /* Nefes geçtiğinde tüm alanı yalayan kısa turkuaz dalga — "geçti" anının
    basınç kızarmasıyla aynı güçte bir karşılığı olsun diye. */
@@ -1652,124 +1543,136 @@ const partSprites = pool(layerEnt, ()=>{ const s = new PIXI.Sprite(TEX.spark);
   s.anchor.set(.5); s.blendMode = BLEND_ADD; return s; }, 300);
 
 /* =========================================================================
-   6b. HAVA AKIŞI (GOAL-015)
+   6b. NEFES (GOAL-028)
 
-   Temizlenen hücreler açılmış hava yoludur. Her nefes denemesinde burun
-   deliğinden (portIn) başlayıp yalnızca TEMİZLENMİŞ boşluk hücreleri üzerinden
-   yayılan bir genişlik-öncelikli arama yapıyoruz:
-     - ostiuma (portOut) ulaşırsa nefes geçiyor,
-     - ulaşamazsa nereye kadar geldiğini (reach) ölçüp oradan geri dönüyoruz.
-   reach sürekli bir değer olduğu için HUD "%62 hava yolu" diyebiliyor ve
-   kısmi ilerleme de ödüllendirilebiliyor — "hava gitmeye çalışıyor ama
-   gidemiyor" hissi tam olarak bu.
+   Eskiden hava yolu iki noktalıydı: burun deliği halkasından ostium halkasına,
+   temizlenmiş hücreler üzerinden bir yol aranıyordu. Bu sahaya iki halka ve
+   iki etiket koymayı gerektiriyordu ve oyunu "şu noktayı şu noktaya bağla"
+   bulmacasına indirgiyordu — bir kez rotayı bulan oyuncu için her gün aynı
+   hamleydi.
+
+   Artık nefes noktasal değil: vücut BÜTÜN boşluktan nefes almayı deniyor.
+   Nefes aşağıdan yukarı satır satır ilerliyor; her satırın direnci o satırın
+   ne kadarının temizlendiğine bağlı. Nefes ilerledikçe zayıflıyor ve tıkalı
+   bir satırda tükeniyor. Nereye kadar gidebildiği (reach) akışı besliyor,
+   akış da bütün haritayı etkiliyor (bkz. flowMult, movePlayer, updateEnemies).
+
+   Nerede temizlediğin hâlâ önemli — alt satırlar üsttekilerin önünü açıyor —
+   ama ezberlenecek tek bir rota yok; dokuyu açmanın kendisi hedef.
    ========================================================================= */
-const airSeen = new Uint8Array(GW*GH);
-const airFrom = new Int32Array(GW*GH);
-const airQ    = new Int32Array(GW*GH);
-let airway = { reach:0, open:false, path:[], front:0 };
+let breath = { reach:0, hFrac:0, top:false, stallY:GH-1, y0:0, y1:GH-1 };
 
-function computeAirway(){
-  airSeen.fill(0);
+/* GOAL-027: akışın puana kazandırdığı çarpan. Tek bir yerde tanımlı, çünkü
+   hem skor hesabı hem HUD hem de bölüm sonu bonusu aynı sayıyı gösteriyor;
+   ayrı ayrı hesaplansalardı biri değişince diğeri yalan söylerdi. */
+function flowMult(){ return 1 + G.flow*0.8; }
+
+/* Nefesin şu anda nereye kadar gidebildiği.
+   Sönüm katsayısı (.12) şuna göre seçildi: hiç temizlenmemiş bir dokuda nefes
+   yirmi küsur satır sonra tükeniyor — yani bölüm başında sıfır değil ama
+   neredeyse hiç; tamamen açılmış bir dokuda hiç zayıflamadan tepeye çıkıyor.
+   Arada her şey sürekli: tek bir hücre bile nefesi bir parça ileri taşıyor. */
+/* GOAL-029: NEFESİN ÖLÇÜMÜ
+
+   İlk sürüm satır satır "kesit alanı" ölçüyordu: her satırın ne kadarı
+   temizse nefes o kadar az zayıflıyor, tıkalı bir satırda tükeniyordu. Model
+   dikey temizleyene haksızlık ediyordu — boşluğun sol yarısını dipten tepeye
+   açmış bir oyuncu kesintisiz açık bir kanal yaratmış oluyor ama her satır
+   yarı dolu göründüğü için ölçüm "%40" diyordu. Oysa o kanaldan hava geçer,
+   yalnızca daha dar geçer. Sönümü yumuşatmak bunu çözmüyordu: katsayıyı
+   düşürünce bu sefer yatay temizleyen, alanın %95'ini açmışken bile son
+   kapalı satır duvar gibi kestiği için tam nefes alamıyordu.
+
+   Doğru ayrım, tek bir sayı yerine İKİ EKSEN kullanmak. Nefes aşağıdan
+   giriyor (boşluğun en alt sıraları) ve yalnızca temizlenmiş hücreler
+   üzerinden yayılıyor. Bu yayılma iki şey söylüyor:
+
+     reach — havanın ULAŞTIĞI doku oranı (hacim). Akış çarpanını bu besliyor.
+     hFrac — havanın ÇIKABİLDİĞİ yükseklik (mesafe). Dalganın nereye kadar
+             gideceğini ve tıkalı nefesin basınç cezasını bu belirliyor.
+
+   Çarpan tarafı böylece şekilden bağımsız: alanın yarısını yatay da açsan
+   dikey de açsan reach 0.50, çarpan aynı. Yükseklik tarafı ise dengesizlik
+   değil strateji — genişlemek çarpanı, dipten tepeye bağlanmak basınç
+   rahatlamasını getiriyor; ikisi de her oyuncuya açık.
+
+   Yan kazanç: dibe bağlı olmayan kopuk temiz bölgeler akışa sayılmıyor.
+   "Dipten yukarı, bağlantılı temizle" öğrenilebilir bir kurala dönüşüyor. */
+function computeBreath(){
+  bfsSeen.fill(0);
   let qh = 0, qt = 0;
-  for(let k=0;k<portIn.length;k++){
-    const i = portIn[k];
-    if(cells[i] === FILL && !airSeen[i]){ airSeen[i] = 1; airFrom[i] = -1; airQ[qt++] = i; }
+  // Tohum: nefes aşağıdan giriyor — boşluğun en alt üç sırasındaki temiz hücreler.
+  // Üç sıra, tek sıralık bir pürüzün (kesitin dip ucu birkaç hücre geniş) bütün
+  // ölçümü sıfırlamaması için.
+  const seedY = Math.max(breath.y0, breath.y1 - 2);
+  for(let y=seedY; y<=breath.y1; y++){
+    const row = y*GW;
+    for(let x=0;x<GW;x++){
+      const i = row+x;
+      if(cavity[i] && cells[i] === FILL && !bfsSeen[i]){ bfsSeen[i] = 1; bfsQ[qt++] = i; }
+    }
   }
-  let best = -1, bestD = Infinity, open = false;
-  const ox = PORTC.out.x, oy = PORTC.out.y;
+  let reached = 0, topY = breath.y1;
   while(qh < qt){
-    const i = airQ[qh++], x = i%GW, y = (i/GW)|0;
-    const dx = x-ox, dy = y-oy, d = Math.sqrt(dx*dx+dy*dy);
-    if(d < bestD){ bestD = d; best = i; }
-    if(portOutMask[i]) open = true;
-    let n;
-    n = i-1;  if(x>0    && !airSeen[n] && cavity[n] && cells[n]===FILL){ airSeen[n]=1; airFrom[n]=i; airQ[qt++]=n; }
-    n = i+1;  if(x<GW-1 && !airSeen[n] && cavity[n] && cells[n]===FILL){ airSeen[n]=1; airFrom[n]=i; airQ[qt++]=n; }
-    n = i-GW; if(y>0    && !airSeen[n] && cavity[n] && cells[n]===FILL){ airSeen[n]=1; airFrom[n]=i; airQ[qt++]=n; }
-    n = i+GW; if(y<GH-1 && !airSeen[n] && cavity[n] && cells[n]===FILL){ airSeen[n]=1; airFrom[n]=i; airQ[qt++]=n; }
+    const i = bfsQ[qh++], x = i%GW, y = (i/GW)|0;
+    reached++;
+    if(y < topY) topY = y;
+    let nb;
+    nb = i-1;  if(x>0    && cavity[nb] && cells[nb]===FILL && !bfsSeen[nb]){ bfsSeen[nb]=1; bfsQ[qt++]=nb; }
+    nb = i+1;  if(x<GW-1 && cavity[nb] && cells[nb]===FILL && !bfsSeen[nb]){ bfsSeen[nb]=1; bfsQ[qt++]=nb; }
+    nb = i-GW; if(y>0    && cavity[nb] && cells[nb]===FILL && !bfsSeen[nb]){ bfsSeen[nb]=1; bfsQ[qt++]=nb; }
+    nb = i+GW; if(y<GH-1 && cavity[nb] && cells[nb]===FILL && !bfsSeen[nb]){ bfsSeen[nb]=1; bfsQ[qt++]=nb; }
   }
-  const path = [];
-  if(best >= 0){
-    for(let i=best;i>=0;i=airFrom[i]){ path.push(i); if(path.length > GW*GH) break; }
-    path.reverse();
-  }
-  airway.open  = open;
-  airway.reach = best < 0 ? 0 : clamp(1 - bestD/airBaseD, 0, 1);
-  if(open) airway.reach = 1;
-  airway.path  = path;
-  // GOAL-016: havanın takıldığı nokta. Hiç temizlenmemişse burun deliğinin
-  // kendisi — yani gösterge hep bir yeri işaret eder, hiç boş kalmaz.
-  airway.front = best >= 0 ? best : (PORTC.in.y*GW + PORTC.in.x);
-  return airway;
+  const span = Math.max(1, breath.y1 - breath.y0);
+  breath.reach  = clamp(reached/Math.max(1, cavCount), 0, 1);
+  breath.hFrac  = reached ? clamp((breath.y1 - topY)/span, 0, 1) : 0;
+  breath.top    = breath.hFrac >= .995;
+  breath.stallY = reached ? topY : breath.y1;
+  G.flowTarget  = breath.reach;
+  return breath;
 }
 
 const airPuffs = [];
-const airPool = pool(layerLight, ()=>{ const s = new PIXI.Sprite(TEX.spark);
-  s.anchor.set(.5); s.blendMode = BLEND_ADD; return s; }, 56);
-function spawnAirFlow(path, ok, count){
-  // GOAL-018: yalnızca açık kanalda akış çizilir. Tıkalıyken hava yola çıkıp
-  // duvara çarpmıyor; tıkanıklığı simge ve gösterge anlatıyor.
-  if(!ok) return;
-  if(!path || path.length < 2) return;
-  const n = count || clamp((path.length/7)|0, 6, 22);
-  for(let k=0;k<n;k++){
-    // GOAL-019: her şerit kendi genliğinde dalgalanarak ilerliyor; ince hızlı
-    // teller ile geniş yumuşak parıltılar karışınca akış katmanlı görünüyor.
-    const thin = Math.random() < .5;
-    airPuffs.push({
-      p:path, u:-k*.05, spd:(thin?.24:.17)+Math.random()*.08, ok:ok,
-      lane0:rnd(-3.2,3.2),        // temel şerit
-      weave:rnd(.7,2.3),          // dalgalanma genliği
-      wfreq:rnd(1.1,2.7),         // dalgalanma sıklığı
-      wph:rnd(0,6.28),
-      len:thin ? rnd(46,84) : rnd(30,58),
-      thin:thin,
-      gust:Math.random() < .16
-    });
+const airPool = pool(layerLight, ()=>{ const s = new PIXI.Sprite(TEX.wind);
+  s.anchor.set(.5); s.blendMode = BLEND_ADD; return s; }, 72);
+
+/* GOAL-028: hava artık bir rotayı takip etmiyor; verilen satırda temizlenmiş
+   NEREDE bir yer varsa oradan yukarı kopuyor. Nefes dalgası ilerlerken bu
+   çağrılıyor, yani hareket bütün sahaya yayılıyor — "hava her yerden geçmeye
+   çalışıyor" hissi tam olarak bu. */
+function spawnBreathPuffs(gy, count){
+  gy = clamp(gy|0, 0, GH-1);
+  for(let k=0;k<count;k++){
+    let x = -1;
+    for(let tries=0;tries<24;tries++){
+      const cx = (B + Math.random()*(GW-2*B))|0;
+      const i = gy*GW+cx;
+      if(cavity[i] && cells[i] === FILL){ x = cx; break; }
+    }
+    if(x < 0) continue;
+    const thin = Math.random() < .5, life = rnd(.55,1.15);
+    airPuffs.push({ x:x, y:gy, vx:rnd(-4,4), vy:-(10+Math.random()*18),
+      life:life, dur:life, len:thin ? rnd(42,84) : rnd(28,56), thin:thin });
   }
 }
 function updateAirFlow(dt){
   for(let i=airPuffs.length-1;i>=0;i--){
     const a = airPuffs[i];
-    a.u += a.spd*dt;
-    if(a.u >= 1){
-      const c = a.p[a.p.length-1];
-      burst(c%GW, (c/GW)|0, 2, 0x9ff0ec, .5);   // ostiumdan dışarı kaçan hava
-      G.portFlare = 1;
-      airPuffs.splice(i,1);
-    }
+    a.x += a.vx*dt; a.y += a.vy*dt; a.life -= dt;
+    if(a.life <= 0) airPuffs.splice(i,1);
   }
+  if(airPuffs.length > airPool.length) airPuffs.splice(0, airPuffs.length - airPool.length);
   for(let i=0;i<airPool.length;i++){
     const s = airPool[i], a = airPuffs[i];
-    if(!a || a.u <= 0){ s.visible = false; continue; }
-    const u = clamp(a.u,0,1), last = a.p.length-1;
-    const j  = Math.min(last, (u*last)|0);
-    const c  = a.p[j];
-    // akışın o noktadaki yönü — şerit bu yöne dönecek
-    const c2 = a.p[Math.min(last, j+4)];
-    const ang = Math.atan2(((c2/GW)|0)-((c/GW)|0), (c2%GW)-(c%GW));
-    const px = ((c%GW)+.5)*CS, py = (((c/GW)|0)+.5)*CS;
-    // şerit kendi ekseninde dalgalanıyor — düz paralel hatlar yerine örgü
-    const lane = a.lane0 + Math.sin(u*Math.PI*2*a.wfreq + a.wph)*a.weave;
-    // girişte yumuşak beliriş, çıkışta sönüş
-    const env = clamp(u/.14,0,1) * clamp((1-u)/.22,0,1);
+    if(!a){ s.visible = false; continue; }
+    const env = Math.sin(clamp(a.life/a.dur,0,1)*Math.PI);   // belirip sönüyor
     s.visible = true;
-    s.rotation = ang;
-    s.x = px + Math.cos(ang+Math.PI/2)*lane*CS;
-    s.y = py + Math.sin(ang+Math.PI/2)*lane*CS;
-    if(a.gust){
-      s.texture = TEX.gust;
-      s.width = a.len*.8; s.height = a.len*.30;
-      s.tint = 0xd6fffa; s.alpha = .42*env;
-    } else if(a.thin){
-      s.texture = TEX.wind;
-      s.width = a.len*(.6+env*.4); s.height = 5;
-      s.tint = 0xeafffc; s.alpha = .55*env;
-    } else {
-      s.texture = TEX.wind;
-      s.width = a.len*(.6+env*.4); s.height = 15;
-      s.tint = 0x8fe4ee; s.alpha = .30*env;
-    }
+    s.rotation = -Math.PI/2;                                  // dikey akış
+    s.x = (a.x+.5)*CS; s.y = (a.y+.5)*CS;
+    s.width  = a.len*(.6+env*.4);
+    s.height = a.thin ? 5 : 14;
+    s.tint   = a.thin ? 0xeafffc : 0x8fe4ee;
+    s.alpha  = (a.thin ? .5 : .28) * env;
   }
 }
 
@@ -1818,8 +1721,19 @@ const G = {
   bosses:[], minions:[], bullets:[], shots:[], pus:[],
   shake:0, laserCd:0, time:0,
   // GOAL-015: nefes döngüsü ve basınç
-  pressure:0, breathT:10, breathStreak:0, breathCue:false, beatT:0, airwayWasOpen:false,
-  airAmbT:0, portFlare:0, breathFlash:0, blockFlash:0
+  pressure:0, breathT:10, breathStreak:0, breathCue:false, beatT:0,
+  airAmbT:0, breathFlash:0, blockFlash:0,
+  /* GOAL-028: nefes dalgasının animasyon durumu. waveDur 0 ise dalga yok;
+     doBreath() bunu doldurup render() bandı alttan (waveY0) tıkandığı satıra
+     (waveY1) taşıyor. fullBreath, nefesin o bölümde ilk kez baştan sona
+     geçtiği anı bir kez ödüllendirmek için. */
+  waveT:0, waveDur:0, waveY0:0, waveY1:0, waveOk:0, waveTop:false, fullBreath:false,
+  /* GOAL-027: AKIŞ — haritanın tamamına etki eden tek sürekli değişken.
+     flowTarget o anki nefes ölçümü (breath.reach), flow ise onu yumuşakça
+     takip eden görünür değer. Ani sıçramalar yerine dokunun yavaşça açılıp
+     kapanması isteniyor; bir hamlede kanalı bağladığında saha bir anda değil
+     yarım saniyede canlanıyor. */
+  flow:0, flowTarget:0
 };
 const DIRV = {0:[0,0],1:[1,0],2:[-1,0],3:[0,-1],4:[0,1]};
 const OPP  = {1:2,2:1,3:4,4:3};
@@ -1841,7 +1755,7 @@ const UI = {
   airFill:$('airFill'), airMark:$('airMark'),
   // GOAL-021: her göstergenin yanında artık sayısal değer de var
   doseVal:$('doseVal'), pressVal:$('pressVal'), breathVal:$('breathVal'),
-  veil:$('pressVeil'),
+  veil:$('pressVeil'), flowVeil:$('flowVeil'),   // GOAL-027
   hint:$('touchHint'),         // GOAL-022: dokunmatik kontrol ipucu
   hudInner:$('hudInner')       // GOAL-023: eni tahtanın enine bağlanıyor
 };
@@ -1877,12 +1791,12 @@ function syncHUD(){
     + '<u>'+escapeHtml(L.name)+'</u>';
   UI.fill.style.width = (G.pct*100).toFixed(1)+'%';
   UI.goal.style.left = (L.target*100)+'%';
-  const met = G.pct >= L.target && airway.open;   // GOAL-015: iki koşul birden
+  // GOAL-027: hedef artık tek koşul. Hava yolu bir kapı değil, çarpan.
+  const met = G.pct >= L.target;
   UI.pct.className = met ? 'met' : '';
   // GOAL-021: hedef ve uyarı artık serbest metin değil, ayrı okunur rozetler
   UI.pct.innerHTML = '<b>%'+Math.floor(G.pct*100)+'</b> temizlendi'
-    + '<span class="tag">hedef %'+Math.round(L.target*100)+'</span>'
-    + (G.pct >= L.target && !airway.open ? '<span class="tag warn">hava yolu kapalı</span>' : '');
+    + '<span class="tag">hedef %'+Math.round(L.target*100)+'</span>';
   UI.score.textContent = G.score.toLocaleString('tr-TR');
   const dr = clamp(G.dose/G.doseMax,0,1);
   UI.dose.style.width = (dr*100)+'%';
@@ -1922,12 +1836,15 @@ function syncHUD(){
   UI.press.style.width = (pr*100).toFixed(1)+'%';
   UI.pressVal.textContent = '%'+Math.round(pr*100);
   UI.pressWrap.classList.toggle('high', pr >= .6);
-  const ar = clamp(airway.reach,0,1);
+  const ar = clamp(breath.reach,0,1), full = breath.top;
   UI.airFill.style.width = (ar*100).toFixed(1)+'%';
   UI.airMark.style.left  = (ar*100).toFixed(1)+'%';
-  UI.airPct.textContent = airway.open ? 'AÇIK' : '%'+Math.round(ar*100);
-  UI.airway.classList.toggle('open', airway.open);
-  UI.airway.classList.toggle('partial', !airway.open && airway.reach >= .5);
+  // GOAL-027: yüzdenin yanında o anki kazanç — "bunu neden istiyorum" sorusunun cevabı
+  // Yüzde havalanan doku oranı; yeşile dönmesi nefesin tepeye ulaştığını söylüyor
+  UI.airPct.innerHTML = '%'+Math.round(ar*100)
+    + '<i>×' + flowMult().toFixed(2) + '</i>';
+  UI.airway.classList.toggle('open', full);
+  UI.airway.classList.toggle('partial', !full && ar >= .5);
   UI.breathBar.style.width = (clamp(G.breathT/Math.max(1,G.level.breath),0,1)*100).toFixed(1)+'%';
   UI.breathVal.textContent = Math.max(0,Math.ceil(G.breathT))+'s';
 }
@@ -1950,9 +1867,34 @@ function showMenuScreen(html){
   hidePanel(); // olası açık overlay (pause vb.) ile çakışmasın
   UI.menuContent.innerHTML = html;
   UI.menuScreen.classList.add('on');
+  /* GOAL-026: menü perdesi artık opak değil, buzlu cam — arkada sahanın
+     kendisi duruyor. Bu yüzden HUD ve araç düğmeleri camın ardından sızmasın
+     diye gizleniyor (display ile değil opacity ile: layout() HUD yüksekliğini
+     ölçüyor, display:none olsa kadraj sıçrardı). */
+  document.body.classList.add('menuOn');
   const b = UI.menuContent.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus(), 30);
 }
-function hideMenuScreen(){ UI.menuScreen.classList.remove('on'); }
+function hideMenuScreen(){
+  UI.menuScreen.classList.remove('on');
+  document.body.classList.remove('menuOn');
+}
+/* GOAL-026: menüde ok tuşlarıyla gezinme — bir oyun menüsünden beklenen şey,
+   ve masaüstünde fareye hiç dokunmadan OYNA'ya basılabiliyor. Yalnızca menü
+   ekranı açıkken devrede olduğu için oyunun kendi yön girdisine karışmıyor.
+   (Enter/Space'i tarayıcı zaten düğmeye basmak olarak yorumluyor.) */
+addEventListener('keydown', e=>{
+  if(!UI.menuScreen.classList.contains('on')) return;
+  if(e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const btns = Array.prototype.slice.call(UI.menuContent.querySelectorAll('button[data-a]'));
+  if(!btns.length) return;
+  e.preventDefault();
+  const step = e.key === 'ArrowDown' ? 1 : -1;
+  const cur  = btns.indexOf(document.activeElement);
+  const next = cur < 0 ? (step > 0 ? 0 : btns.length-1)
+                       : (cur + step + btns.length) % btns.length;
+  btns[next].focus();
+  Sound.init(); Sound.resume(); Sound.ui();
+});
 /* GOAL-020: ses kaydırıcıları. Ayarlar ekranı iki ayrı kapta (duraklatma
    paneli / tam ekran menü) doğabildiği için ikisinde de delegasyonla
    dinleniyor; değer anında uygulanıp localStorage'a yazılıyor. */
@@ -2043,18 +1985,46 @@ function showGameOverNameEntry(){
 function showMainMenu(){
   G.state = 'title';
   Sound.scene('menu');   // GOAL-020
-  // GOAL-014 (madde 1): ana menü artık ayrı, tam ekran bir uygulama ekranı —
-  // dikey OYNA / BÖLÜMLER / YÜKSEK SKORLAR / SES yapısı.
+  /* GOAL-026: ana menü yeniden tasarlandı (biçim tarafı için index.html'deki
+     GOAL-026 bloğu). Eski hâli iki satır yazı ve dört düz düğmeydi; oyunun
+     hiçbir öğesini taşımadığı için herhangi bir oyunun menüsü olabilirdi.
+
+     Üç değişiklik:
+       - Ekranın merkezinde bir marka kilidi var ve amblem olarak oyuncunun
+         sahada yönettiği siklamen sprite'ının ta kendisi kullanılıyor.
+         Menüdeki çiçek ile oynadığın çiçek aynı; ilacın adı da artık tek
+         satır künye değil, ekranın en büyük öğesi.
+       - Perde saydam olduğu için arkada gün 1'in burun kesiti nefes almaya
+         devam ediyor — menüye ayrı bir arka plan görseli üretmek gerekmiyor.
+       - Düğmeler "simge | ad | künye" satırlarına dönüştü: OYNA'nın yanında
+         kürün kaç gün sürdüğü, YÜKSEK SKORLAR'ın yanında mevcut rekor yazıyor.
+         Menü, oyuna girmeden önce oyun hakkında da bir şey söylüyor. */
+  const hs = loadHighScores();
+  const best = hs.length ? hs[0] : null;
+  const bestTxt = best ? best.score.toLocaleString('tr-TR') : '—';
   showMenuScreen(
-    `<div class="menuBrand">
-       <div class="kicker">NASODREN &nbsp;·&nbsp; SİKLAMEN EKSTRESİ</div>
-       <div class="title">Sinüsleri <em>geri kazan</em>.</div>
+    `<div class="menuHero">
+       <span class="heroBreath"></span>
+       <div class="heroEmblem"><img src="${playerAssetUrl}" alt="Siklamen"></div>
+       <div class="wordmark"><span class="w1">SİNÜS</span><span class="w2">HAREKÂTI</span></div>
+       <div class="heroSub"><span>NASODREN · SİKLAMEN EKSTRESİ</span></div>
+       <div class="heroTag">Sinüsleri <em>geri kazan</em>.</div>
+       <div class="heroRule"></div>
      </div>
      <div class="menuStack">
-       <button class="menuBtn primary" data-a="start">OYNA</button>
-       <button class="menuBtn" data-a="levels">BÖLÜMLER</button>
-       <button class="menuBtn" data-a="scores">YÜKSEK SKORLAR</button>
-       <button class="menuBtn" data-a="settings">AYARLAR</button>
+       <button class="menuBtn nav primary" data-a="start"><span class="mbGlyph">►</span
+         ><span class="mbLabel">OYNA</span><span class="mbHint">10 GÜNLÜK KÜR</span></button>
+       <button class="menuBtn nav" data-a="levels"><span class="mbGlyph">◈</span
+         ><span class="mbLabel">BÖLÜMLER</span><span class="mbHint">GÜN SEÇ</span></button>
+       <button class="menuBtn nav" data-a="scores"><span class="mbGlyph">★</span
+         ><span class="mbLabel">YÜKSEK SKORLAR</span><span class="mbHint">${bestTxt}</span></button>
+       <button class="menuBtn nav" data-a="settings"><span class="mbGlyph">◑</span
+         ><span class="mbLabel">AYARLAR</span><span class="mbHint">SES</span></button>
+     </div>
+     <div class="menuFoot">
+       <span>${isTouch ? 'PARMAĞINI SÜRÜKLE' : 'OK TUŞLARI / WASD'}</span><i>·</i>
+       <span>5 BÖLGE · 10 GÜN</span><i>·</i>
+       <span>EN İYİ <b>${bestTxt}</b></span>
      </div>`);
 }
 /* GOAL-025: assets/sinuzit.png artık bir arayüz öğesi değil, kesitlerin
@@ -2290,11 +2260,12 @@ function startLevel(){
   const st = playerStart();
   G.dir=0; G.frac=0; G.lastDir=0; G.px=st.x; G.py=st.y; G.startCell=G.py*GW+G.px;
   G.pressure=0; G.breathT=L.breath; G.breathStreak=0; G.breathCue=false; G.beatT=0;
-  G.airwayWasOpen=false;
   airPuffs.length = 0;
-  G.airAmbT = 0; G.portFlare = 0; G.breathFlash = 0; G.blockFlash = 0;
+  G.airAmbT = 0; G.breathFlash = 0; G.blockFlash = 0;
+  G.flow = 0; G.flowTarget = 0;   // GOAL-027
+  G.waveT = 0; G.waveDur = 0; G.waveOk = 0; G.waveTop = false; G.fullBreath = false;
   UI.airway.classList.remove('soon');
-  computeAirway();
+  computeBreath();
   G.doseMax=L.dose; G.dose=L.dose; G.buffs={}; G.invuln=1.2; G.shake=0;
   particles.length = 0;
   for(let i=0;i<L.bossN;i++) G.bosses.push(spawnBoss(L,i));
@@ -2337,10 +2308,15 @@ function introLevel(){
      ${regionRowHTML(L)}
      ${thumb ? `<div class="plateShot"><img src="${thumb}" alt="">
         <div><b>${cap}</b><p>${L.med}</p></div></div>` : `<p class="note">${L.med}</p>`}
-     <p class="lede">Alanın <b>%${Math.round(L.target*100)}</b>'ini temizle <b>ve</b>
-        mavi halkadan (burun deliği) yeşil halkaya (ostium) kesintisiz bir kanal aç.
-        Her <b>${L.breath.toFixed(0)} saniyede</b> bir nefes denemesi olacak: kanal
-        kapalıysa basınç yükselir ve ekran kızarır.</p>
+     <p class="lede"><b>Hedef:</b> alanın <b>%${Math.round(L.target*100)}</b>'ini temizlemek.
+        Günü bitiren tek şart bu.</p>
+     <p class="lede"><b>Nefes</b> ise şart değil, çarpan. Her
+        <b>${L.breath.toFixed(0)} saniyede</b> bir vücut nefes almayı deniyor:
+        hava aşağıdan girer ve yalnızca temizlediğin yerlerden yayılır.
+        <b>Ne kadar çok dokuya ulaşırsa</b> akış o kadar açılır — puan
+        <b>1,8 katına</b> çıkar, daha hızlı gidersin, doz yavaş yanar, doku
+        sakinleşir. <b>Tepeye kadar çıkamazsa</b> basınç yükselir ve ekran
+        kızarır. Yolu dipten yukarı, kopuksuz aç.</p>
      <div class="acts"><button class="cta" data-a="go">BAŞLA</button></div>`);
 }
 function winGame(){
@@ -2410,7 +2386,8 @@ function movePlayer(dt){
     }
   } else { G.dir = 0; G.frac = 0; }
   if(!G.dir) return;
-  const spd = G.buffs.SPEED ? PLAYER_SPD_FAST : PLAYER_SPD;
+  // GOAL-027: akış açıldıkça ilaç dokuda daha hızlı yayılıyor
+  const spd = (G.buffs.SPEED ? PLAYER_SPD_FAST : PLAYER_SPD) * (1 + G.flow*.22);
   G.frac += spd*dt;
   let guard = 0;
   while(G.frac >= 1 && guard++ < 8){
@@ -2471,7 +2448,7 @@ function closeTrail(){
     const i = newCells[(Math.random()*newCells.length)|0];
     burst(i%GW, (i/GW)|0, 1, 0x9ff0ec, .7);
   }
-  const areaScore = Math.round(gain*1.2);
+  const areaScore = Math.round(gain*1.2*flowMult());   // GOAL-027: akış çarpanı
   G.score += areaScore;
   G.dose = clamp(G.dose + share*G.doseMax*2.2, 0, G.doseMax);
   Sound.capture(share);
@@ -2491,28 +2468,28 @@ function closeTrail(){
   G.drawing = false; G.trail = []; G.corners = [];
   G.startCell = G.py*GW+G.px;
 
-  /* GOAL-015: her kapanıştan sonra kanalı yeniden ölç. Hücreler sadece burada
-     değiştiği için bu tek nokta yeterli — hava yolu rozeti anında tepki
-     veriyor, yani "kanalı bağladım" anı oyuncuya hemen geri bildiriliyor. */
-  const wasOpen = G.airwayWasOpen;
-  computeAirway();
-  G.airwayWasOpen = airway.open;
-  if(airway.open && !wasOpen){
-    G.score += 1200;
-    spawnAirFlow(airway.path, true);
+  /* GOAL-028: her kapanıştan sonra nefesi yeniden ölç. Hücreler yalnızca
+     burada değiştiği için bu tek nokta yeterli — akış göstergesi anında tepki
+     veriyor, yani "dokuyu açtım" anı oyuncuya hemen geri bildiriliyor.
+     Nefesin o bölümde ilk kez baştan sona geçtiği an bir kez ödüllendiriliyor. */
+  computeBreath();
+  if(breath.top && !G.fullBreath){
+    G.fullBreath = true;
+    G.score += 1500;
     G.breathFlash = 1;
-    spawnScorePopup(PORTC.out.x, PORTC.out.y, 1200);
-    toast('HAVA YOLU AÇILDI', 'BURUN DELİĞİ ↔ OSTIUM BAĞLANDI · +1200');
+    spawnBreathPuffs(Math.round(lerp(breath.y1, breath.y0, .5)), 14);
+    spawnScorePopup(cavCX, breath.y0 + 5, 1500);
+    toast('NEFES AÇILDI', 'HAVA DİPTEN TEPEYE ULAŞTI · +1500');
     Sound.breathOpen();
     G.pressure = Math.max(0, G.pressure - .25);
   }
 
-  if(G.pct >= G.level.target){
-    if(airway.open) levelClear();
-    // Alan hedefi dolduğu halde gün bitmiyorsa sebebini her kapanışta söyle:
-    // sessiz kalmak, oyuncunun "bozuldu mu?" diye düşündüğü en kötü an olurdu.
-    else toast('HEDEF TAMAM', 'HAVA YOLU %'+Math.round(airway.reach*100)+' — YEŞİL HALKAYA BAĞLAN');
-  }
+  /* GOAL-027: gün yalnızca alan hedefiyle bitiyor. Hava yolu şartı kalktı —
+     oyuncu hedefi tutturmuşken "bir de kanalı bağla" diye tutulmuyor. Kanal
+     artık bir kapı değil bir yatırım: açtıkça bütün saha lehine dönüyor
+     (bkz. flowMult, movePlayer, updateEnemies, doz yanması) ve gün sonunda
+     akış bonusu olarak ayrıca ödüllendiriliyor (bkz. levelClear). */
+  if(G.pct >= G.level.target) levelClear();
   syncHUD();
 }
 /* =========================================================================
@@ -2531,33 +2508,50 @@ function doBreath(){
   const L = G.level;
   G.breathT = L.breath; G.breathCue = false;
   UI.airway.classList.remove('soon');
-  computeAirway();
-  if(airway.open){
+  computeBreath();
+  /* GOAL-028: dalga animasyonunu kur — alttan başlayıp nefesin tükendiği
+     satıra kadar çıkacak. Süre mesafeyle orantılı ki uzun bir nefes uzun
+     sürsün, daha başlarken tıkanan nefes kısa kesilsin. */
+  G.waveT = 0; G.waveDur = .6 + breath.hFrac*1.4;
+  G.waveY0 = breath.y1; G.waveY1 = breath.stallY; G.waveOk = breath.reach;
+  G.waveTop = breath.top;
+  if(breath.top){
     G.breathStreak++;
     const gain = 700 + G.breathStreak*350;
     G.score += gain;
     G.pressure = Math.max(0, G.pressure - .42);
     G.dose = clamp(G.dose + G.doseMax*.22, 0, G.doseMax);
-    spawnAirFlow(airway.path, true);
     G.breathFlash = 1;
-    spawnScorePopup(PORTC.out.x, PORTC.out.y, gain);
+    spawnScorePopup(cavCX, breath.y0 + 5, gain);
     toast('NEFES GEÇTİ', G.breathStreak > 1
       ? G.breathStreak+'. TEMİZ NEFES · +'+gain
-      : 'HAVA YOLU AÇIK · +'+gain);
+      : 'HAVA BAŞTAN SONA GEÇTİ · +'+gain);
     Sound.breathOpen();
-  } else if(airway.reach >= .5){
-    G.breathStreak = 0;
-    G.score += 150;
-    G.pressure = clamp(G.pressure + L.pressGain*.45, 0, 1);
-    G.blockFlash = 1;
-    toast('SIZINTI', 'HAVA %'+Math.round(airway.reach*100)+' İLERLEDİ');
-    Sound.leak(); G.shake = Math.max(G.shake, 4);
   } else {
+    /* GOAL-027: sert eşik yok, eğri var — havanın gittiği yol kadar puan
+       alıyorsun, gidemediği yol kadar basınç biriktiriyorsun. Kısmi ilerleme
+       gerçekten ilerleme sayılıyor. */
+    /* Puan hacimden (reach), basınç cezası mesafeden (hFrac) geliyor: ne kadar
+       dokuyu havalandırdığın kazandırıyor, nefesi tepeye çıkaramamak
+       cezalandırıyor. Sert eşik yok, ikisi de sürekli. */
+    const r = clamp(breath.reach, 0, 1), hf = clamp(breath.hFrac, 0, 1);
     G.breathStreak = 0;
-    G.pressure = clamp(G.pressure + L.pressGain, 0, 1);
+    const gain = Math.round(500*r*r);
+    if(gain > 0){ G.score += gain; spawnScorePopup(cavCX, breath.stallY, gain); }
+    /* Basınç cezası yalnızca yüksekliğe bakmıyor: temizlenmiş ama henüz dibe
+       bağlanmamış doku da bir şey ifade ediyor. Yukarıdan aşağı temizleyen bir
+       oyuncu alanın yarısını açmışken nefes hâlâ giremez (kural bu), ama vücut
+       da tamamen tıkalı bir dokudaki kadar zorlanmaz. Bağlamak cezayı tamamen
+       kaldırıyor, yani teşvik bozulmuyor; sadece ceza eğrisi insaflı. */
+    G.pressure = clamp(G.pressure + L.pressGain*(1-hf)*(1 - .6*G.pct), 0, 1);
     G.blockFlash = 1;
-    toast('TIKALI', 'BASINÇ ARTIYOR');
-    Sound.blocked(); G.shake = Math.max(G.shake, 7);
+    if(hf >= .5){
+      toast('YARIM NEFES', 'HAVA %'+Math.round(hf*100)+' YÜKSELDİ' + (gain ? ' · +'+gain : ''));
+      Sound.leak(); G.shake = Math.max(G.shake, 3);
+    } else {
+      toast('TIKALI', 'HAVA %'+Math.round(hf*100)+' · BASINÇ ARTIYOR');
+      Sound.blocked(); G.shake = Math.max(G.shake, 6);
+    }
   }
   if(G.pressure >= .999) sneezeRelease();
   syncHUD();
@@ -2610,7 +2604,10 @@ function levelClear(){
   G.state = 'clear';
   const bonus = Math.round((G.pct-G.level.target)*10000) + G.lives*500;
   const breathBonus = G.breathStreak*600;   // GOAL-015: kesintisiz nefes serisi
-  G.score += Math.max(0,bonus) + breathBonus;
+  // GOAL-027: hava yolu artık şart değil; karşılığını gün sonunda bonus olarak
+  // veriyoruz ki "zorunlu değil ama çok değerli" dengesi rakamla da kurulsun.
+  const flowBonus = Math.round(G.flow*4000);
+  G.score += Math.max(0,bonus) + breathBonus + flowBonus;
   Sound.clear();
   const last = G.levelIdx >= LEVELS.length-1;
   showPanel(
@@ -2619,6 +2616,7 @@ function levelClear(){
      <p class="note">${G.level.med}</p>
      <div class="stats">
        <div><span>ALAN BONUSU</span><b>${Math.max(0,bonus).toLocaleString('tr-TR')}</b></div>
+       <div><span>AKIŞ BONUSU</span><b>${flowBonus.toLocaleString('tr-TR')}</b></div>
        <div><span>NEFES SERİSİ</span><b>${G.breathStreak}</b></div>
        <div><span>TOPLAM SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
      </div>
@@ -2723,7 +2721,9 @@ function vulnerable(){ return G.invuln <= 0 && (G.drawing || G.dose <= 0); }
 function updateEnemies(dt){
   const L = G.level;
   // GOAL-015: basınç yükseldikçe doku öfkeleniyor — tıkanıklığın ikinci bedeli
-  const rage = 1 + G.pressure*.35;
+  // GOAL-027: basınç dokuyu öfkelendiriyor, akış sakinleştiriyor. İki kuvvet
+  // aynı çarpanda buluşuyor ki oyuncu "nefes açınca saha yatıştı"yı hissetsin.
+  const rage = clamp(1 + G.pressure*.35 - G.flow*.25, .7, 1.4);
   for(const b of G.bosses){
     moveEnemy(b, dt*rage, 1.1); b.t += dt;
     if(L.fire > 0 && !G.buffs.FREEZE){
@@ -2864,66 +2864,29 @@ function render(dt){
   }
   drawTrail();
 
-  /* GOAL-015: portlar ve basınç perdesi */
-  {
-    const pi = PORTC.in, po = PORTC.out, bp = 1 + Math.sin(t*2.4)*.10;
-    portInFX.g.x = portInFX.r.x = (pi.x+.5)*CS;
-    portInFX.g.y = portInFX.r.y = (pi.y+.5)*CS;
-    // nefes denemesi yaklaşırken giriş halkası belirgin şekilde nefes alır
-    portInFX.r.width = portInFX.r.height = pi.r*2.8*CS*bp*(G.breathCue ? 1.18 : 1);
-    portInFX.g.width = portInFX.g.height = pi.r*4.6*CS;
-    portInFX.g.alpha = .16 + Math.sin(t*2.4)*.05;
-    portOutFX.g.x = portOutFX.r.x = (po.x+.5)*CS;
-    portOutFX.g.y = portOutFX.r.y = (po.y+.5)*CS;
-    portOutFX.r.width = portOutFX.r.height = po.r*2.8*CS*(2-bp);
-    portOutFX.r.alpha = airway.open ? .72 + Math.sin(t*5.2)*.2 + G.portFlare*.5 : .34;
-    portOutFX.g.width = portOutFX.g.height = po.r*4.6*CS;
-    portOutFX.g.alpha = (.14 + Math.sin(t*2.9)*.05) * (airway.open ? 1.8 : 1);
-  }
-  /* GOAL-016: tıkanma işaretçisi + yol göstergesi */
-  {
-    const open = airway.open;
-    const fx2 = ((airway.front%GW)+.5)*CS, fy2 = (((airway.front/GW)|0)+.5)*CS;
-    blockRing.visible = blockGlow.visible = !open;
-    if(!open){
-      // sakin bir nefes ritmi; nefes denemesi olduğunda bir kez büyüyüp söner
-      const pulse = 1 + Math.sin(t*1.9)*.07 + G.blockFlash*.55;
-      blockRing.x = blockGlow.x = fx2; blockRing.y = blockGlow.y = fy2;
-      blockRing.width = blockRing.height = 44*pulse;
-      blockRing.alpha = .52 + Math.sin(t*1.9)*.10 + G.blockFlash*.4;
-      blockGlow.width = blockGlow.height = 110 + G.blockFlash*70;
-      blockGlow.alpha = .14 + G.blockFlash*.22;
+  /* GOAL-028: NEFES DALGASI — sahayı alttan yukarı tarayan bant.
+     Dalga nerede duruyorsa tıkanıklık orada; oyuncunun HUD'a bakması gerekmiyor.
+     Geçerken turkuaz, yarı geçerken soluk, tıkanınca kırmızı. */
+  if(G.waveDur > 0){
+    G.waveT += dt;
+    const k = clamp(G.waveT/G.waveDur, 0, 1);
+    if(k >= 1){ G.waveDur = 0; waveBand.alpha = 0; }
+    else {
+      const ease = 1 - (1-k)*(1-k);                 // hızlı çıkıp yavaşlayan
+      const gy = lerp(G.waveY0, G.waveY1, ease);
+      waveBand.x = PFW/2;
+      waveBand.y = (gy+.5)*CS;
+      waveBand.width  = PFW;
+      waveBand.height = 110 + 70*G.waveOk;
+      waveBand.tint = G.waveTop ? 0x9ff6ea
+                    : G.waveOk >= .35 ? 0x7fd8dc : 0xff8f88;
+      // sonunda sönüyor; tıkalı nefeste duraklama noktasında bir kez şişiyor
+      const fade = Math.sin(clamp(k/.94,0,1)*Math.PI);
+      waveBand.alpha = (.14 + .34*G.waveOk) * fade;
+      // dalga geçtiği satırdan havayı yukarı sürüklüyor
+      if(Math.random() < .6) spawnBreathPuffs(Math.round(gy), 1 + (G.waveOk > .5 ? 1 : 0));
     }
-    if(G.blockFlash > 0) G.blockFlash = Math.max(0, G.blockFlash - dt*1.8);
-    const len = cavRoute.length;
-    const N = channelGlow.length;
-    for(let i=0;i<N;i++){
-      const s = channelGlow[i];
-      if(!open || len < 8){ s.visible = false; continue; }
-      const cel = cavRoute[Math.round(i/(N-1)*(len-1))];
-      const u = i/(N-1);
-      const w = .5 + .5*Math.sin(u*6.2 - t*2.1);   // boru boyunca geçen parlaklık
-      s.visible = true;
-      s.x = ((cel%GW)+.5)*CS; s.y = (((cel/GW)|0)+.5)*CS;
-      s.width = s.height = 26 + w*12;
-      s.alpha = .07 + w*.08;
-    }
-  }
-  /* port etiketleri — öğretme dönemi bitince geri çekiliyor */
-  {
-    const a0 = G.level.day <= 3 ? .8 : .3;
-    // GOAL-022 (revize): etiketler ekranda sabit boyda kalsın diye uiScale ile
-    labelIn.width  = 150*uiScale; labelIn.height  = 25*uiScale;
-    labelOut.width = 150*uiScale; labelOut.height = 25*uiScale;
-    // kadrajin disina tasmasinlar: yaridan az kalan etiket okunmuyor
-    const lhw = labelIn.width/2 + 4;
-    labelIn.x  = clamp((PORTC.in.x+.5)*CS,  frame.x0+lhw, frame.x1-lhw);
-    labelOut.x = clamp((PORTC.out.x+.5)*CS, frame.x0+lhw, frame.x1-lhw);
-    labelIn.y  = (PORTC.in.y+.5)*CS  + PORTC.in.r*CS  + 16*uiScale;
-    labelOut.y = (PORTC.out.y+.5)*CS - PORTC.out.r*CS - 16*uiScale;
-    labelIn.alpha = a0;
-    labelOut.alpha = airway.open ? a0 : a0 * (.7 + Math.sin(t*3.2)*.3);
-  }
+  } else waveBand.alpha = 0;
   /* nefes geçti dalgası */
   if(G.breathFlash > 0){
     G.breathFlash = Math.max(0, G.breathFlash - dt*1.6);
@@ -2931,12 +2894,21 @@ function render(dt){
     breathWave.width = PFW*(1.1 + (1-G.breathFlash)*.5);
     breathWave.height = PFH*(1.3 + (1-G.breathFlash)*.5);
   } else breathWave.alpha = 0;
-  if(G.portFlare > 0) G.portFlare = Math.max(0, G.portFlare - dt*2.4);
-
   if(UI.veil){
-    // nabız: basınç yükseldikçe hem koyulaşıyor hem hızlanıyor
+    /* GOAL-028: ekran iki kaynaktan kızarıyor — biriken basınç (kalıcı, nabız
+       atan) ve tıkalı bir nefesin hemen ardından gelen kızarma (blockFlash).
+       İkincisi yavaş sönüyor (~1 sn) ki "nefes geçemedi" anı hissedilsin ama
+       ekran sürekli kırmızı kalmasın. */
     const beat = .84 + Math.sin(t*(4.0 + G.pressure*3.4))*.16;
-    UI.veil.style.opacity = (clamp(G.pressure,0,1)*.85*beat).toFixed(3);
+    UI.veil.style.opacity =
+      clamp(clamp(G.pressure,0,1)*.85*beat + G.blockFlash*.45, 0, .95).toFixed(3);
+  }
+  if(G.blockFlash > 0) G.blockFlash = Math.max(0, G.blockFlash - dt*1.1);
+  /* GOAL-027: akış perdesi. Basıncınkinden bilerek daha sakin bir nabızla
+     soluyor — biri tehlike, diğeri rahatlama anlatıyor. */
+  if(UI.flowVeil){
+    const br = .88 + Math.sin(t*1.7)*.12;
+    UI.flowVeil.style.opacity = (clamp(G.flow,0,1)*.42*br).toFixed(3);
   }
 
   grainSprite.x = -rnd(0, PFW*.18);
@@ -3026,7 +2998,10 @@ app.ticker.add(()=>{
   if(G.state === 'play'){
     if(G.invuln > 0) G.invuln -= dt;
     // GOAL-015: basınç dozu daha hızlı yakıyor
-    G.dose = Math.max(0, G.dose - dt*(1 + G.pressure*.8));
+    // GOAL-027: açık kanal dozu koruyor, tıkalı kanal yakıyor
+    G.dose = Math.max(0, G.dose - dt*Math.max(.35, 1 + G.pressure*.8 - G.flow*.45));
+    // Akış ölçülen değere yumuşakça yaklaşıyor (~0.5 sn)
+    G.flow += (G.flowTarget - G.flow) * Math.min(1, dt*2.2);
     G.pressure = Math.max(0, G.pressure - dt*.012);   // çok yavaş kendiliğinden düşüş
     G.breathT -= dt;
     if(G.breathT <= 1.3 && !G.breathCue){
@@ -3036,11 +3011,15 @@ app.ticker.add(()=>{
     // GOAL-016: hava sadece nefes anında değil, sürekli akmaya çalışıyor.
     // Tıkalıyken her birkaç saniyede bir duvara çarpıp geri tepişini görmek,
     // "neresi tıkalı" sorusunun en doğrudan cevabı.
+    /* GOAL-028: nefesler arasında da doku soluk alıyor — dalganın ulaşabildiği
+       bölgede seyrek hava telleri yukarı süzülüyor. Akış arttıkça hem sıklaşıyor
+       hem yukarı doğru genişliyor, yani sahanın canlılığı doğrudan ilerlemenin
+       göstergesi oluyor. */
     G.airAmbT -= dt;
-    if(G.airAmbT <= 0 && airway.open){
-      // yavaşlayan şeritler ekranda daha uzun kaldığı için doğum aralığı arttı
-      G.airAmbT = .42;
-      if(airway.open) spawnAirFlow(airway.path, true, 3);
+    if(G.airAmbT <= 0 && G.flow > .10){
+      G.airAmbT = lerp(.6, .2, G.flow);
+      const lo = Math.min(breath.y1, breath.stallY + 2);
+      spawnBreathPuffs(lo + Math.random()*Math.max(1, breath.y1-lo), 1 + Math.round(G.flow*2));
     }
     if(G.pressure > .45){
       G.beatT -= dt;
@@ -3078,7 +3057,7 @@ paintHealthy(LEVELS[0]); texUpdate(bgTex);
 paintTissue(LEVELS[0]);
 paintWalls(LEVELS[0]); texUpdate(wallTex);
 rasterRegion(0,0,GW,GH);
-computeAirway();
+computeBreath();
 layout();
 syncHUD();
 // GOAL-013 (madde 1): eski büyük tanıtım paneli yerine sade ana menü —

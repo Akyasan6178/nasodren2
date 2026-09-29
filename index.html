@@ -544,6 +544,177 @@
     #toast .t{font-size:24px}
     #toast .s{font-size:12.5px;margin-top:6px}
   }
+  /* ---------- GOAL-031: bölüm giriş sahnesi ----------
+     Brifing paneli yerine tam ekran kısa bir sahne: yüzün üstünde sinüsler,
+     ilacın bugüne kadarki yolu, açılacak sinüse yakınlaşma ve kesitin kendisi.
+     Sahne sonunda perde incelip hazırlanmış tahtayı gösteriyor; künye kartı
+     yanda (geniş ekran) ya da altta (telefon) duruyor. Tuvali JS çiziyor. */
+  #cine{position:fixed;inset:0;z-index:7;display:none;overflow:hidden;cursor:pointer}
+  #cine.on{display:block}
+  #cine.ended{cursor:default}
+  #cineCv{position:absolute;inset:0;width:100%;height:100%}
+  #cineTitle{position:absolute;left:0;right:0;top:calc(7% + env(safe-area-inset-top));text-align:center;
+    pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease;
+    text-shadow:0 2px 18px rgba(0,0,0,.85)}
+  #cineTitle.on{opacity:1;transform:none}
+  #cineTitle .k{display:block;font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--oxygen);margin-bottom:10px}
+  #cineTitle b{display:block;font-size:clamp(32px,6.4vw,58px);line-height:1.15;font-weight:800;color:var(--bone)}
+  #cineTitle i{display:block;font-style:normal;font-size:clamp(15px,2.6vw,19px);font-weight:600;color:var(--muted);margin-top:8px}
+  #cineSkip{position:absolute;right:14px;top:calc(12px + env(safe-area-inset-top));z-index:2;
+    min-width:64px;height:44px;padding:0 16px;font-size:13px;font-weight:700;letter-spacing:.03em;
+    color:var(--label);border:1px solid rgba(255,255,255,.18);background:rgba(8,17,25,.7);border-radius:6px}
+  #cineSkip:hover{color:var(--bone);border-color:rgba(53,224,216,.45)}
+  #cine.ended #cineSkip{display:none}
+  #cineCard{position:absolute;z-index:2;opacity:0;transform:translateY(12px);pointer-events:none;
+    transition:opacity .5s ease,transform .5s ease;
+    width:min(460px,calc(100vw - 24px));padding:22px 22px 20px;border-radius:10px;
+    background:rgba(7,15,22,.9);border:1px solid rgba(53,224,216,.22);
+    box-shadow:0 22px 48px -18px rgba(0,0,0,.8)}
+  #cineCard.on{opacity:1;transform:none;pointer-events:auto}
+  /* yerleşim JS'ten: .side = tahtanın solundaki boşlukta dikey ortalı,
+     .bottom = ekranın altında ortalı */
+  #cineCard.bottom{left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translate(-50%,12px)}
+  #cineCard.bottom.on{transform:translate(-50%,0)}
+  #cineCard .ccK{font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--oxygen);margin-bottom:8px}
+  #cineCard .ccT{font-size:clamp(25px,4.4vw,34px);line-height:1.15;font-weight:800;margin-bottom:4px}
+  #cineCard .ccS{font-size:15px;font-weight:600;color:var(--muted);margin-bottom:14px}
+  #cineCard .ccA{font-size:14.5px;line-height:1.6;color:#c6dbe2;margin-bottom:14px}
+  #cineCard .plateShot{margin:0 0 14px}
+  #cineCard .ccR{font-size:13.5px;line-height:1.6;color:#b3cdd7;margin-bottom:18px;
+    padding-left:12px;border-left:2px solid var(--cyclamen-deep)}
+  #cineCard .ccR b{color:var(--bone);font-weight:700}
+  #cineCard .acts{justify-content:space-between}
+  #cineCard .ccHint{font-size:12px;color:var(--muted);font-weight:600}
+  #cineCard.side{padding:20px 20px 18px}
+  #cineCard.side .ccT{font-size:clamp(24px,2.4vw,30px)}
+  #cineCard.side .plateShot{gap:12px;flex-wrap:nowrap}
+  #cineCard.side .plateShot img{width:112px;height:90px}
+  #cineCard.side .plateShot p{font-size:13.5px;line-height:1.5}
+  /* altta, geniş ekran: solda metin, sağda günün görseli ve BAŞLA */
+  #cineCard.wide{width:min(860px,calc(100vw - 32px));display:grid;
+    grid-template-columns:minmax(0,1fr) 220px;gap:0 24px;align-items:end}
+  #cineCard.wide .ccR{margin-bottom:0}
+  #cineCard.wide .plateShot{flex-direction:column;align-items:flex-start;gap:10px}
+  #cineCard.wide .plateShot img{width:220px;height:112px}
+  #cineCard.wide .plateShot p{display:none}
+  /* yalın kart: başlık üst bantta (#cineTitle.rest), kartta yalnızca içerik */
+  #cineCard.lean .ccK,#cineCard.lean .ccT,#cineCard.lean .ccS{display:none}
+  #cineTitle.rest{top:calc(18px + env(safe-area-inset-top))}
+  #cineTitle.rest b{font-size:clamp(28px,5.4vw,44px)}
+  @media (max-width:719px){
+    #cineCard.lean{display:flex;flex-direction:column}
+    #cineCard.lean .ccMain,#cineCard.lean .ccSide{display:contents}
+    #cineCard.lean .plateShot{order:-1;flex-wrap:nowrap;gap:12px}
+    #cineCard.lean .plateShot img{width:92px;height:74px}
+  }
+  body.cineOn #hud,body.cineOn #tools,body.cineOn #touchHint,body.cineOn #infoRail{opacity:0;pointer-events:none}
+
+  /* ---------- GOAL-031: bilgi şeridi ----------
+     Kestikçe o bölgeyle ilgili kısa bilgiler. Bilerek sakin: parıltı yok,
+     nabız yok, yalnızca yavaş bir geçiş. Tahtanın dışında, geniş ekranda
+     solunda, telefonda altında duruyor (bkz. layout) — göz oyunda kalsın,
+     isteyen dönüp okusun. */
+  #infoRail{position:absolute;z-index:3;pointer-events:none;opacity:0;transform:translateY(6px);
+    transition:opacity .8s ease,transform .8s ease;
+    padding:12px 14px 13px;border-radius:8px;
+    background:rgba(6,14,20,.62);border:1px solid rgba(255,255,255,.07);
+    border-left:2px solid rgba(53,224,216,.42)}
+  #infoRail.on{opacity:1;transform:none}
+  #infoRail .irHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+    font-size:11.5px;font-weight:700;letter-spacing:.03em;color:var(--muted);margin-bottom:7px}
+  #infoRail .irHead span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #infoRail .irHead span:last-child{flex:none;font-variant-numeric:tabular-nums}
+  #irBody{transition:opacity .45s ease}
+  #irBody.swap{opacity:0}
+  #irBody b{display:block;font-size:14.5px;line-height:1.25;font-weight:700;color:var(--bone);margin-bottom:5px}
+  #irBody p{font-size:13.5px;line-height:1.52;color:#b6cfd9}
+  #infoRail.compact #irBody p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  body.menuOn #infoRail{opacity:0}
+  @media (max-width:680px){
+    #cineTitle .k{font-size:12px}
+    #cineCard{padding:18px 16px 16px}
+    #cineCard .ccS{font-size:14px;margin-bottom:10px}
+    #cineCard .ccA{font-size:13.5px;line-height:1.55;margin-bottom:10px}
+    #cineCard .ccR{font-size:13px;margin-bottom:14px}
+    #cineCard .plateShot{margin-bottom:10px}
+    #infoRail{padding:10px 12px 11px}
+    #irBody b{font-size:13.5px}
+    #irBody p{font-size:13px}
+  }
+  /* ---------- GOAL-038: kim kimdir ----------
+     İsim etiketleri ve ilk oyun rehberi. Küçük ama okunur (13px, dar harf
+     aralığı), zemini koyu ki her dokunun üstünde seçilsin. */
+  #tags{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+  #tags .tag{position:absolute;left:0;top:0;white-space:nowrap;opacity:0;transition:opacity .3s;
+    font-size:13px;font-weight:700;letter-spacing:.02em;line-height:1;padding:6px 9px 5px;border-radius:6px;
+    background:rgba(6,14,20,.82);color:var(--bone);border:1px solid rgba(255,255,255,.14)}
+  #tags .tag.me{color:#ffd1e6;border-color:rgba(255,77,157,.55)}
+  #tags .tag.foe{color:#d9f7b0;border-color:rgba(157,245,138,.4)}
+  #tags .tag.small{font-size:12px;padding:5px 7px 4px}
+  #coach{position:absolute;left:0;top:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .35s;
+    width:min(280px,calc(100vw - 20px));padding:12px 14px 13px;border-radius:10px;
+    background:rgba(8,20,28,.94);border:1px solid rgba(53,224,216,.5);box-shadow:0 14px 30px -12px rgba(0,0,0,.8)}
+  #coach.on{opacity:1}
+  #coach b{display:block;font-size:12px;font-weight:700;color:var(--oxygen);margin-bottom:5px}
+  #coach p{font-size:14px;line-height:1.45;color:var(--bone)}
+  #coach::after{content:'';position:absolute;left:var(--ax,50%);bottom:-7px;width:12px;height:12px;margin-left:-6px;
+    background:rgba(8,20,28,.94);border-right:1px solid rgba(53,224,216,.5);border-bottom:1px solid rgba(53,224,216,.5);
+    transform:rotate(45deg)}
+  #coach.below::after{bottom:auto;top:-7px;transform:rotate(225deg)}
+  body.menuOn #tags,body.menuOn #coach,body.cineOn #tags,body.cineOn #coach{opacity:0!important}
+  /* NASIL OYNANIR */
+  .howList{display:flex;flex-direction:column;gap:12px;width:min(560px,92vw);margin-bottom:6px}
+  .howRow{display:flex;gap:14px;align-items:center;padding:12px 14px;border-radius:10px;
+    background:rgba(8,19,27,.7);border:1px solid rgba(255,255,255,.08)}
+  .howRow>img,.howRow>span:first-child{flex:none;width:52px;height:52px;object-fit:contain}
+  .howRow b{display:block;font-size:15px;font-weight:700;margin-bottom:3px}
+  .howRow p{font-size:14px;line-height:1.5;color:#c3d9e1}
+  .howPair{display:flex;align-items:center;justify-content:center;gap:2px}
+  .howPair img{width:25px;height:25px;object-fit:contain}
+  .howCut{border:2px dashed var(--oxygen);border-radius:4px;background:rgba(53,224,216,.14)}
+  .howBreath{border-radius:50%;background:radial-gradient(circle,rgba(53,224,216,.6),rgba(53,224,216,0) 70%)}
+  .howPuRow>div{width:100%}
+  .howPus{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .howPu{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--bone);
+    padding:5px 9px;border-radius:6px;border:1px solid var(--c);background:rgba(6,14,20,.6)}
+  .howPu i{font-style:normal}
+  @media (max-width:680px){ .howRow{padding:10px 12px;gap:12px} .howRow p{font-size:13.5px} }
+  /* ---------- GOAL-039: yatayda yan çubuk HUD ----------
+     Aynı bileşenler, dikey sırayla: gün ve skor üstte, bölge adı ve ilerleme
+     çubuğu altında, göstergeler tek sütun. Tahta sağda, ekranın bütün
+     yüksekliğinde (bkz. layout). */
+  body.hudSide #hud{right:auto;bottom:0;width:var(--sideW);overflow-y:auto;
+    padding:calc(16px + env(safe-area-inset-top)) 18px 16px calc(18px + env(safe-area-inset-left));
+    background:linear-gradient(90deg,rgba(6,13,20,.97) 78%,rgba(6,13,20,.0))}
+  body.hudSide .hudInner{max-width:none}
+  body.hudSide .row{flex-wrap:wrap;align-items:flex-start;gap:14px 12px}
+  body.hudSide #day{order:1}
+  body.hudSide #scoreBox{order:2;margin-left:auto}
+  body.hudSide #stage{order:3;flex-basis:100%}
+  body.hudSide #stageName{white-space:normal;line-height:1.25}
+  body.hudSide #stageName u{display:block;margin:4px 0 0}
+  body.hudSide #sub{grid-template-columns:1fr;gap:14px;margin-top:18px}
+  body.hudSide #buffs{position:static;margin-top:14px;justify-content:flex-start}
+  body.hudSide #tools{right:auto;left:calc(16px + env(safe-area-inset-left))}
+  #infoRail.gone{display:none}
+  @media (max-height:520px){
+    body.hudSide #hud{padding-top:calc(10px + env(safe-area-inset-top))}
+    /* kısa yatay ekran (yatay telefon): boşluklar sıkı, SES/DUR sağ altta */
+    body.hudSide #sub{gap:7px;margin-top:9px}
+    body.hudSide .mHead{margin-bottom:5px}
+    body.hudSide .mSub{margin-top:6px}
+    body.hudSide .row{gap:8px 12px}
+    body.hudSide #livesWrap .mHead{display:none}
+    body.hudSide #stageName u{display:none}
+    body.hudSide #pctRead{margin-top:6px;font-size:12.5px}
+    body.hudSide #tools{left:auto;right:calc(12px + env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom))}
+    body.hudSide #day .num{font-size:28px}
+    body.hudSide .num{font-size:21px}
+    body.hudSide #stageName{font-size:15px;margin-bottom:6px}
+    body.hudSide #lives{height:22px}
+    body.hudSide .heart{width:22px;height:22px}
+    body.hudSide .tool{height:42px}
+  }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -598,7 +769,17 @@
   <div id="touchHint"><b>Parmağını sürükleyerek yönlendir</b>
     <i>Dokudan bir parça kes, kapattığın alan temizlenir.</i></div>
   <div id="fps"></div>
+  <div id="tags" aria-hidden="true"></div>
+  <div id="coach" role="status"><b></b><p></p></div>
+  <div id="infoRail" aria-live="polite"><div class="irHead"><span id="irKick">BİLGİ</span><span id="irIdx"></span></div>
+    <div id="irBody"><b></b><p></p></div></div>
   <div id="overlay"><div class="plateEdge"><div class="plate" id="plate"></div></div></div>
+  <div id="cine" aria-label="Bölüm girişi">
+    <canvas id="cineCv"></canvas>
+    <div id="cineTitle"><span class="k"></span><b></b><i></i></div>
+    <button id="cineSkip" type="button">GEÇ ›</button>
+    <div id="cineCard"></div>
+  </div>
   <div id="menuScreen"><div id="menuContent"></div></div>
 </div>
 

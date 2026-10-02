@@ -1,16 +1,17 @@
 # Bölüm bilgi görselleri
 
-Boşluğun en açık yerine oturan, o günün konusunu anlatan **merkez görseli**.
-Buraya bırakılan PNG'ler otomatik bulunur ve prosedürel çizimin yerine geçer —
-kod değişikliği gerekmez.
+O günün konusunu anlatan **bilgi görseli**. Bölüm başındaki künye kartında,
+altyazısıyla birlikte gösteriliyor. (Eskiden tahtanın ortasında da açığa
+çıkıyordu; artık temizlenen alanın altında bölgenin sahnesi var, bkz.
+`assets/bg/README.md`.) Buraya bırakılan PNG'ler otomatik bulunur ve prosedürel
+çizimin yerine geçer — kod değişikliği gerekmez.
 
 Dosya adı: `day01.png` … `day08.png`.
 
 ## Bölgeler
 
 Günler `assets/sinuzit.jfif`teki önden görünümdeki dört yapıya dağılıyor
-(kür 8 gün). Burun boşluğu iki taraflı tek biçim; diğerlerinde birinci gün
-sol, ikinci gün sağ taraftır:
+(kür 8 gün). Her bölgede birinci gün sol, ikinci gün sağ taraftır:
 
 | Gün | Bölge |
 |---|---|
@@ -46,7 +47,10 @@ kullanılmıyor — bilgi, dokunun ve hücrenin kendi biçiminden gelmeli.
 Görsel yaklaşık **236 × 176** piksellik bir kutuya en-boy oranı korunarak
 sığdırılır ve ortalanır. Dar kesitli günlerde (ör. etmoid günleri) kutu otomatik
 olarak %46'ya kadar küçülebilir, bu yüzden ince detaylara güvenmeyin. Arkasında
-yumuşak bir koyuluk, altında da ölçekten bağımsız okunur bir altyazı var.
+yumuşak bir koyuluk, altında (yer yoksa üstünde) ölçekten bağımsız okunur bir altyazı var.
+Altyazı tek ya da iki satırda boşluğa tam sığmıyorsa tahtaya hiç yazılmıyor —
+yarım kalmış kelime göstermektense; bölüm başındaki künye kartında her zaman
+duruyor. Şu an burun (1-2) ve etmoid sol (5) günlerinde kesit buna yetmiyor.
 
 Şeffaf arka planlı PNG tercih edilir: görsel dokunun üstüne oturuyor, kendi
 dikdörtgen çerçevesiyle değil.

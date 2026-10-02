@@ -14,7 +14,7 @@ gerekmez — dosyayı koy, `npm run dev` yeniden başlat, yeter.
 | `ethmoid.png` | Gün 5-6 — Etmoid sinüs |
 | `frontal.png` | Gün 7-8 — Frontal sinüs |
 
-Maksiller, etmoid ve frontalde bölgenin iki günü sol ve sağ tarafıdır (iki
+Her bölgede (burun boşluğu dahil) iki gün sol ve sağ taraftır (iki
 taraf `sinuzit.jfif`teki gibi ayrı biçimde); arka plan görseli ikisinde de
 aynı kalır.
 
@@ -35,8 +35,7 @@ varsaymayın.
 ## Ne anlatmalı
 
 Bu katman **tedavi edilmiş dokudur** — oyuncu temizledikçe altından çıkar.
-Prosedürel sürüm günün konusunu şöyle anlatıyor, hazır görseller de aynı yayı
-izlemeli:
+Hazır görsel hazırlanacaksa günün konusu şu yayla anlatılabilir:
 
 | Günler | Bölge | Konu | Görsel dili |
 |---|---|---|---|
@@ -48,16 +47,27 @@ izlemeli:
 Genel kural: **gün ilerledikçe açılıyor** — koyu ve sıkışıktan berrak ve
 havadara. Arka plan tek başına "kaçıncı gündeyiz" sorusuna cevap vermeli.
 
+Görsel yokken oyun her bölgenin iyileşmiş hâlini **tek parça bir sahne**
+olarak kendisi çiziyor (`paintHealthy`): aydınlık, hava dolu bir boşluk;
+duvarlar boyunca kesitin biçimine kendiliğinden uyan pembe, nemli mukoza zarı
+ve yüzeyinde silyalar; tepeden inen ışık huzmeleri, dipten tepeye yükselen hava
+akımları, kabarcıklar. Bölgeye özel: maksillerde tavanda ışık saçan ostium ve
+tabanda diş kökleri, etmoidde bal peteği hücreleri ve parlayan ağızları,
+frontalde güçlü ışık ve dipteki kanaldan yükselen hava. Havanın tonu bölgenin
+yüz haritasındaki rengine çalıyor (burun turkuaz, maksiller lavanta, etmoid
+mavi, frontal yeşil). Hazır görseller de bu dili izlerse haritadan tahtaya
+geçişte renk kopmaz.
+
+## Canlı katman
+
+Temizlenen alanda, arka planın üstünde yukarı süzülen hava zerreleri var
+(oyun çiziyor, görselin parçası değil). Hava yolu açıldıkça hızlanıyor, nefes
+anında kısa bir an parlıyor. Görsele ayrıca kabarcık ya da zerre koymaya
+gerek yok; durağan dokuya odaklanın.
+
 ## Üstüne binen katmanlar
 
 Arka planın üstüne oyun şunları çiziyor, tasarlarken hesaba katın:
 
-- **Kanal parıltısı** — burun deliğinden ostiuma giden rota boyunca ince bir
-  turkuaz ışık. Arka plan bunu yutmasın; o bölgeyi çok yoğun desenle doldurmayın.
-- **Bilgi görseli** — boşluğun en açık yerine oturan, o günün konusunu anlatan
-  doğal/bilimsel görsel ve altındaki başlık (ör. "SİLYALI EPİTEL"). Yaklaşık
-  236 × 176 piksellik bir alan kaplar ve konumu kesitten kesite değişir, bu
-  yüzden arka planın hiçbir yerinde okunmayı zorlaştıracak yoğunlukta desen
-  olmamalı. Ayrıntılar ve kendi asset yuvası için `assets/plate/README.md`.
 - **Kemik duvarlar** — boşluğun dışı zaten opak duvarla kapanıyor, yani görselin
   kenarları büyük ölçüde görünmez. Merkeze yatırım yapın.

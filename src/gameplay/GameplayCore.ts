@@ -24,7 +24,9 @@
 import * as PIXI from 'pixi.js';
 // GOAL-009 (Görsel Revizyon Sprinti 1): prosedürel dokuların yerini alan gerçek assetler.
 import playerAssetUrl from '../../assets/siklament.png';   // oyuncu sprite'ı
-import bossAssetUrl from '../../assets/bacteria.png';      // boss sprite'ı
+import bossAssetUrl from '../../assets/bacteria.png';      // boss sprite'ı (1. evre: küçük)
+import boss2AssetUrl from '../../assets/bacteria2.png';    // 2. evre: orta
+import boss3AssetUrl from '../../assets/bacteria3.png';    // 3. evre: en büyük ve hızlı
 import minionFlagellaAssetUrl from '../../assets/minion_flagella.png'; // kind:0 minion
 import minionSporeAssetUrl from '../../assets/minion_spore.png';       // kind:1 minion
 import healthAssetUrl from '../../assets/health.png'; // GOAL-013: can ikonu
@@ -48,6 +50,13 @@ const BG_GLOB = import.meta.glob('../../assets/bg/*.png', { eager:true, import:'
    gerçek bir bilimsel fotoğraf/illüstrasyon gelince kod değişmeden devreye
    girsin diye. Boşken prosedürel doğal çizim kullanılır. */
 const PLATE_GLOB = import.meta.glob('../../assets/plate/*.png', { eager:true, import:'default' });
+
+/* Bölüm haritaları için asset yuvası. assets/board/ içine bırakılan görselin
+   kızarık boşluğu o günün tahtası olur (bkz. boardMask, paintBoard):
+     day01.png ... day08.png → yalnızca o gün
+     maxillary_sol.png, frontal_sag.png ... → o bölgenin o tarafı
+   Görseli olmayan günler anatomi çiziminden (ANAT) kurulmaya devam eder. */
+const BOARD_GLOB = import.meta.glob('../../assets/board/*.png', { eager:true, import:'default' });
 
 export async function startGame(){
 "use strict";
@@ -100,6 +109,13 @@ function ramp(stops, t){
   const n = stops.length-1, f = t*n, i = Math.min(n-1, f|0);
   return mixc(stops[i], stops[i+1], f-i);
 }
+/* Piksel döngüleri için bellek ayırmayan sürümler: sonucu o'ya yazar. */
+function rampTo(stops, t, o){
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const n = stops.length-1, f = t*n, i = Math.min(n-1, f|0), u = f-i, a = stops[i], b = stops[i+1];
+  o[0] = a[0] + (b[0]-a[0])*u; o[1] = a[1] + (b[1]-a[1])*u; o[2] = a[2] + (b[2]-a[2])*u;
+}
+function mixTo(o, b, t){ o[0] += (b[0]-o[0])*t; o[1] += (b[1]-o[1])*t; o[2] += (b[2]-o[2])*t; }
 function valueNoise(w,h,scale,seed){
   const gw = Math.ceil(w/scale)+2, gh = Math.ceil(h/scale)+2, g = new Float32Array(gw*gh);
   let s = seed>>>0 || 1;
@@ -125,11 +141,29 @@ function fbm(w,h,base,seed,oct){
   for(let i=0;i<out.length;i++) out[i] /= norm;
   return out;
 }
+/* fbm, görsel katman çözünürlüğünde: eski (VW x VH) çözünürlükte üretilip
+   bilineer büyütülüyor — gürültü zaten yumuşak, keskinliği üstüne binen
+   doğrusal olmayan eğriler (damar filamenti, kenar) tam çözünürlükte veriyor. */
+function fbmHi(base, seed, oct){
+  const lo = fbm(VW, VH, base, seed, oct);
+  if(SC === AU) return lo;
+  const out = new Float32Array(HW*HH);
+  for(let y=0;y<HH;y++){
+    const gy = clamp((y+.5)/PX - .5, 0, VH-1), iy = Math.min(VH-2, gy|0), ty = gy-iy;
+    const ra = iy*VW, rb = ra+VW;
+    for(let x=0;x<HW;x++){
+      const gx = clamp((x+.5)/PX - .5, 0, VW-1), ix = Math.min(VW-2, gx|0), tx = gx-ix;
+      const a = lo[ra+ix], b = lo[ra+ix+1], c = lo[rb+ix], d = lo[rb+ix+1];
+      out[y*HW+x] = (a + (b-a)*tx)*(1-ty) + (c + (d-c)*tx)*ty;
+    }
+  }
+  return out;
+}
 
 /* =========================================================================
    2. YAPILANDIRMA
    Oynanış ızgarası 160x160 (hücre = mantık birimi).
-   Görsel katman 3x alt-piksel (480x480) üretilip 960x960'a doğrusal ölçekleniyor.
+   Görsel katmanlar hücre başına SC piksel (bkz. aşağıda) üretilip sahaya ölçekleniyor.
    ========================================================================= */
 /* GOAL-022 (revize): ızgara her cihazda AYNI.
    Bir ara telefonlar için ızgarayı 120x160'a çevirip kesitleri o orana
@@ -145,7 +179,15 @@ function fbm(w,h,base,seed,oct){
    boyutu hâlâ kesitin kendi kutusu (cavBB) belirliyor. */
 const GW = 160, GH = 160, B = 3, CS = 6;
 const PFW = GW*CS, PFH = GH*CS;
-const SC = 3, HW = GW*SC, HH = GH*SC;
+/* Görsel katmanların çözünürlüğü: hücre başına SC piksel. Eskiden 3'tü
+   (480x480); tahta ekranı doldurmak için büyütüldüğünde yüksek DPI ekranda
+   ~8 kat büyüyordu — kenarlar basamaklı, şema ve yazı bulanık. Artık 6
+   (960x960), zayıf cihazda 4. Görsel çizimler hâlâ eski birimde (AU = 3
+   piksel/hücre) yazılı: prosedürel çizen yerler PX = SC/AU ile ölçekleniyor,
+   yumuşak gürültüler eski çözünürlükte üretilip büyütülüyor (fbmHi), yani
+   bölüm hazırlığı 4 kat değil ~1,5-2 kat uzuyor. */
+const SC = (navigator.hardwareConcurrency || 8) <= 4 ? 4 : 6, HW = GW*SC, HH = GH*SC;
+const AU = 3, VW = GW*AU, VH = GH*AU, PX = SC/AU;
 /* GOAL-015: oyun alani artik dikdortgen degil, burun/sinus boslugu. Yuzde
    hesabi sabit INTERIOR yerine cavCount uzerinden yapiliyor (bkz. bolum 4b). */
 const EMPTY = 0, FILL = 1, TRAIL = 2;
@@ -205,19 +247,25 @@ const LEVEL_THEMES = [
    küçük tahta kısa kesim demek).
    Hedef eğri: aynı test oyuncusu 1. günü neredeyse her seferinde, son günü
    üç denemeden ikisinde geçiyor; aradaki her gün bir öncekinden biraz zor.
-   Ölçüm (üç canla kazanma oranı, gün başına 16 deneme): %94 · 88 · 81 · 75 ·
-   88 · 94 · 75 · 69; gün başına ölüm 0.6 → 1.4 düzenli artıyor. Bunun üstüne
-   oyuncu kaybederse günü tekrarlayabiliyor ve her yeni güne +1 canla giriyor.
-   Bir değer değişirse eğri yeniden ölçülmeli: tools/denge-testi.mjs. */
+   Bunun üstüne oyuncu kaybederse günü tekrarlayabiliyor ve her yeni güne +1
+   canla giriyor. Bir değer değişirse eğri yeniden ölçülmeli: tools/denge-testi.mjs.
+   Maksiller ve frontal günleri harita görsellerine (assets/board), bakteri de
+   üç evreye (BOSS_TIER_BY_DAY: yarıçap 7 → 9 → 11, son evre en hızlı) geçince
+   yeniden ölçüldü. İç bölmesi olmayan açık maksiller kesede ve büyüyen
+   bakterinin yanında asıl kaldıraç mikrop sayısı ve hedef yüzde çıktı.
+   Burun boşluğu iki ayrı yarım tahtaya bölününce (dar ve uzun, ızgaraya ancak
+   ~5000 hücreyle sığıyor) 1-2. günler de yeniden ölçüldü.
+   Ölçüm (üç canla kazanma oranı, gün başına 48-112 deneme): %92 · 88 · 84 ·
+   80 · 81 · 88 · 71 · 64; gün başına ölüm 0.7 → 1.4. */
 const DAY_TUNE = [
-  { target:.7, bossR:9, bossSpd:14, bossN:1, fire:0, mini:3, miniSpd:17, dose:80 },
-  { target:.72, bossR:9, bossSpd:15, bossN:1, fire:.3, mini:4, miniSpd:18, dose:75 },
-  { target:.72, bossR:8, bossSpd:14, bossN:1, fire:.25, mini:3, miniSpd:17, dose:72 },
-  { target:.73, bossR:7, bossSpd:15, bossN:1, fire:.35, mini:3, miniSpd:18, dose:68 },
-  { target:.76, bossR:7, bossSpd:18, bossN:1, fire:.65, mini:6, miniSpd:22, dose:64 },
-  { target:.77, bossR:7, bossSpd:20, bossN:1, fire:.8, mini:7, miniSpd:23, dose:62 },
-  { target:.74, bossR:6, bossSpd:14, bossN:1, fire:.25, mini:3, miniSpd:16, dose:60, areaT:3800 },
-  { target:.76, bossR:7, bossSpd:15, bossN:1, fire:.3, mini:3, miniSpd:17, dose:58, areaT:3800 }
+  { target:.7, bossR:7, bossSpd:14, bossN:1, fire:0, mini:2, miniSpd:17, dose:80 },
+  { target:.72, bossR:7, bossSpd:15, bossN:1, fire:.2, mini:3, miniSpd:18, dose:75 },
+  { target:.66, bossR:7, bossSpd:14, bossN:1, fire:.15, mini:2, miniSpd:16, dose:72 },
+  { target:.68, bossR:9, bossSpd:14, bossN:1, fire:.2, mini:1, miniSpd:16, dose:68 },
+  { target:.76, bossR:9, bossSpd:18, bossN:1, fire:.65, mini:5, miniSpd:22, dose:64 },
+  { target:.76, bossR:9, bossSpd:18, bossN:1, fire:.7, mini:4, miniSpd:22, dose:62 },
+  { target:.71, bossR:11, bossSpd:19, bossN:1, fire:.1, mini:1, miniSpd:16, dose:60, areaT:5400 },
+  { target:.71, bossR:11, bossSpd:20, bossN:1, fire:.2, mini:1, miniSpd:17, dose:58, areaT:5400 }
 ];
 const LEVELS = [0,1,3,4,5,7,8,9].map((t, i) => Object.assign({}, LEVEL_THEMES[t], DAY_TUNE[i], { day:i+1, theme:t }));
 /* -------------------------------------------------------------------------
@@ -233,7 +281,7 @@ const LEVELS = [0,1,3,4,5,7,8,9].map((t, i) => Object.assign({}, LEVEL_THEMES[t]
    BOARDS): burun boşluğu, maksiller, etmoid ve frontal sinüs. Sıra ilacın
    izlediği yol: burundan giriyor, önce en büyük sinüs olan maksiller, sonra
    gözlerin arasındaki etmoid ve en son, kanalı en uzun olan frontal açılıyor.
-   Burun boşluğu iki taraflı tek biçim; diğer bölgelerde birinci gün sol,
+   Her bölgede (burun boşluğu dahil) birinci gün sol,
    ikinci gün sağ taraf — görseldeki iki taraf gerçekten farklı biçimde.
    ------------------------------------------------------------------------- */
 const REGIONS = {
@@ -249,12 +297,10 @@ const REGIONS = {
 const DAY_REGION = ['nasal','nasal','maxillary','maxillary','ethmoid','ethmoid','frontal','frontal'];
 const DAY_SIDE   = ['sol','sag','sol','sag','sol','sag','sol','sag'];
 const DETAIL_BY_DAY = [0,1, 1,2, 2,3, 2,3];   // hem bölgeler arasında hem bölge içinde daralıyor
-/* GOAL-016: arka plan motifi, o günün konusunu anlatır. Açığa çıkan katman
-   "tedavi edilmiş doku"dur; dolayısıyla tedavi yayının neresinde olduğumuzu
-   göstermesi gerekir — tıkalı damarlar, boşalan mukus, çalışan siller, serbest
-   hava. Oyuncu ekrana bakınca hangi aşamada olduğunu okuyabilsin diye. */
-const MOTIF_BY_THEME = ['congestion','congestion','congestion','mucus','mucus',
-                      'cilia','cilia','airflow','airflow','airflow'];
+/* Bakteri kür boyunca evriliyor: 1-3. gün küçük (bacteria), 4-6. gün orta
+   (bacteria2), 7-8. gün en büyük ve en hızlı (bacteria3). Boyut ve hız
+   DAY_TUNE'daki bossR/bossSpd; görsel buradan. */
+const BOSS_TIER_BY_DAY = [0,0,0, 1,1,1, 2,2];
 LEVELS.forEach((L,i) => {
   const R = REGIONS[DAY_REGION[i]];
   L.region    = DAY_REGION[i];
@@ -265,7 +311,7 @@ LEVELS.forEach((L,i) => {
   L.music     = R.music;
   L.cav       = R.cav;
   L.detail    = DETAIL_BY_DAY[i];
-  L.motif     = MOTIF_BY_THEME[L.theme];
+  L.bossTier  = BOSS_TIER_BY_DAY[i];
   L.breath    = 11.5 - L.theme*0.5;      // tema 1: 11.5sn ... tema 10: 7sn
   L.pressGain = 0.15 + L.theme*0.013;    // tıkalı nefesin basınç bedeli
 });
@@ -537,93 +583,6 @@ function texGrain(){
 
 /* ---- açığa çıkan resim: sağlıklı doku + siklamen ---- */
 const bgCanvas = makeCanvas(HW,HH);
-/* ---- gün konusunu anlatan motifler (GOAL-016) ----
-   Hepsi açığa çıkan dokunun ÜSTÜNE, kısık alfayla biniyor: bilgi taşısın ama
-   ödül görüntüsünü boğmasın. k = kendi grubu içindeki ilerleme (0 = başı). */
-function motifCongestion(c,k){          // gün 1-3: şişmiş damarlar, ödem
-  c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-  const n = Math.round(76 - k*38);
-  for(let i=0;i<n;i++){
-    let x = rnd(0,HW), y = rnd(0,HH), a = rnd(0,7);
-    c.strokeStyle = 'rgba(198,54,76,'+(.17-k*.07).toFixed(3)+')';
-    c.lineWidth = rnd(2,7)*(1-k*.4);
-    c.beginPath(); c.moveTo(x,y);
-    const seg = 3 + (Math.random()*4|0);
-    for(let s=0;s<seg;s++){ a += rnd(-.75,.75); x += Math.cos(a)*rnd(16,42); y += Math.sin(a)*rnd(16,42); c.lineTo(x,y); }
-    c.stroke();
-  }
-  const m = Math.round(22 - k*12);
-  for(let i=0;i<m;i++){
-    const x = rnd(0,HW), y = rnd(0,HH), r = rnd(26,82);
-    const g = c.createRadialGradient(x,y,0,x,y,r);
-    g.addColorStop(0,'rgba(184,44,64,'+(.13-k*.05).toFixed(3)+')');
-    g.addColorStop(1,'rgba(184,44,64,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(x,y,r,0,7); c.fill();
-  }
-  c.restore();
-}
-function motifMucus(c,k){               // gün 4-5: aşağı süzülen mukus telleri
-  c.save(); c.lineCap = 'round';
-  const n = Math.round(48 - k*18);
-  for(let i=0;i<n;i++){
-    const x = rnd(0,HW), y0 = rnd(-40,HH*.55), len = rnd(60,190)*(1-k*.28), w = rnd(3,11);
-    const g = c.createLinearGradient(x,y0,x,y0+len);
-    g.addColorStop(0,'rgba(210,194,120,0)');
-    g.addColorStop(.35,'rgba(204,186,116,'+(.21-k*.09).toFixed(3)+')');
-    g.addColorStop(1,'rgba(148,148,90,0)');
-    c.strokeStyle = g; c.lineWidth = w;
-    c.beginPath(); c.moveTo(x,y0);
-    c.quadraticCurveTo(x+rnd(-24,24), y0+len*.5, x+rnd(-16,16), y0+len);
-    c.stroke();
-    c.fillStyle = 'rgba(226,212,142,'+(.15-k*.06).toFixed(3)+')';
-    c.beginPath(); c.ellipse(x+rnd(-14,14), y0+len, w*.7, w*1.15, 0,0,7); c.fill();
-  }
-  c.restore();
-}
-function motifCilia(c,k){               // gün 6-7: çalışan siller, açılan ostiumlar
-  c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-  const rows = 7;
-  for(let r=0;r<rows;r++){
-    const y = (r+.5)/rows*HH;
-    for(let x=6;x<HW;x+=9){
-      const ph = Math.sin(x*.06 + r*1.3)*10;
-      c.strokeStyle = 'rgba(118,234,220,'+(.10+k*.06).toFixed(3)+')';
-      c.lineWidth = 1.6;
-      c.beginPath(); c.moveTo(x, y+8);
-      c.quadraticCurveTo(x+ph*.6, y, x+ph, y-12);
-      c.stroke();
-    }
-  }
-  for(let i=0;i<5;i++){
-    const x = rnd(HW*.15,HW*.85), y = rnd(HH*.18,HH*.82), r = rnd(22,60);
-    c.strokeStyle = 'rgba(150,248,232,'+(.09+k*.05).toFixed(3)+')';
-    c.lineWidth = 2.5; c.beginPath(); c.arc(x,y,r,0,7); c.stroke();
-    c.lineWidth = 1;   c.beginPath(); c.arc(x,y,r*1.25,0,7); c.stroke();
-  }
-  c.restore();
-}
-function motifAirflow(c,k){             // gün 8-10: serbest hava akımı
-  c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-  for(let i=0;i<26;i++){
-    const y0 = rnd(0,HH), x0 = rnd(-60,HW*.4);
-    const g = c.createLinearGradient(x0,y0,x0+HW*.8,y0);
-    g.addColorStop(0,'rgba(140,240,240,0)');
-    g.addColorStop(.5,'rgba(162,248,244,'+(.11+k*.07).toFixed(3)+')');
-    g.addColorStop(1,'rgba(140,240,240,0)');
-    c.strokeStyle = g; c.lineWidth = rnd(1.5,5);
-    c.beginPath(); c.moveTo(x0,y0);
-    c.bezierCurveTo(x0+HW*.25, y0+rnd(-50,50), x0+HW*.55, y0+rnd(-50,50), x0+HW*.8, y0+rnd(-40,40));
-    c.stroke();
-  }
-  for(let i=0;i<70;i++){
-    const x = rnd(0,HW), y = rnd(0,HH), r = rnd(2,9);
-    c.strokeStyle = 'rgba(190,255,250,'+(.12+k*.08).toFixed(3)+')';
-    c.lineWidth = 1; c.beginPath(); c.arc(x,y,r,0,7); c.stroke();
-  }
-  c.restore();
-}
-const MOTIFS = { congestion:motifCongestion, mucus:motifMucus, cilia:motifCilia, airflow:motifAirflow };
-
 /* GOAL-028: burada eskiden paintDuct() vardı — burun deliğinden ostiuma giden
    sabit rotayı dokuya bir parıltı olarak işliyordu. Nefes artık noktadan
    noktaya değil bütün boşluktan geçtiği için izlenecek tek bir rota da yok. */
@@ -884,11 +843,13 @@ const PLATE_CAPS = ['KILCAL DAMARLAR DOLU','ÖDEMLİ MUKOZA','DAMARLAR DARALIYOR
    ve aynı tuval bölüm girişindeki önizleme görseli olarak yeniden
    kullanılabiliyor — oyuncu günün görselini temizlemeyi beklemeden görüyor. */
 const PLATE_W = 300, PLATE_H = 240;
-const plateCv = makeCanvas(PLATE_W, PLATE_H), plateCtx = plateCv.getContext('2d');
+const PLATE_K = Math.max(1, PX*(window.devicePixelRatio > 1 ? 1.5 : 1));   // levha tuvali, sahadaki büyütmeye yetecek kadar ince
+const plateCv = makeCanvas(Math.round(PLATE_W*PLATE_K), Math.round(PLATE_H*PLATE_K)), plateCtx = plateCv.getContext('2d');
 function renderPlateLayer(L){
   const c = plateCtx;
   c.setTransform(1,0,0,1,0,0);
-  c.clearRect(0,0,PLATE_W,PLATE_H);
+  c.clearRect(0,0,plateCv.width,plateCv.height);
+  c.setTransform(PLATE_K,0,0,PLATE_K,0,0);
   const custom = plateAssetImgs['day'+String(L.day).padStart(2,'0')];
   const plate = PLATES[L.theme];
   if(!custom && !plate) return false;
@@ -902,49 +863,15 @@ function renderPlateLayer(L){
 /* Bölüm giriş panelinde gösterilecek önizleme (koyu zeminli PNG veri-URL'i). */
 function plateThumbURL(L){
   if(!renderPlateLayer(L)) return '';
-  const cv = makeCanvas(PLATE_W, PLATE_H), c = cv.getContext('2d');
-  const g = c.createRadialGradient(PLATE_W/2,PLATE_H/2,0,PLATE_W/2,PLATE_H/2,PLATE_W*.55);
+  const cv = makeCanvas(plateCv.width, plateCv.height), c = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const g = c.createRadialGradient(W/2,H/2,0,W/2,H/2,W*.55);
   g.addColorStop(0,'#0d1f28'); g.addColorStop(1,'#050c12');
-  c.fillStyle = g; c.fillRect(0,0,PLATE_W,PLATE_H);
+  c.fillStyle = g; c.fillRect(0,0,W,H);
   c.drawImage(plateCv,0,0);
   c.globalCompositeOperation = 'lighter'; c.globalAlpha = .45;
   c.drawImage(plateCv,0,0);
   try{ return cv.toDataURL('image/png'); }catch(e){ return ''; }
-}
-
-function paintPlate(c, L){
-  const cap = PLATE_CAPS[L.theme];
-  if(!renderPlateLayer(L)) return;
-  c.save();
-  c.translate(plateX*SC, plateY*SC);
-  c.scale(plateScale, plateScale);
-  // görselin dokudan ayrılması için arkasına yumuşak bir koyuluk
-  const bg = c.createRadialGradient(0,0,0,0,0,136);
-  bg.addColorStop(0,'rgba(3,9,13,.62)');
-  bg.addColorStop(.7,'rgba(3,9,13,.34)');
-  bg.addColorStop(1,'rgba(3,9,13,0)');
-  c.fillStyle = bg; c.beginPath(); c.arc(0,0,136,0,7); c.fill();
-
-  // iki geçiş: normal basım + toplamalı parlaklık — doku üstünde silinmesin
-  c.drawImage(plateCv, -PLATE_W/2, -PLATE_H/2);
-  c.globalCompositeOperation = 'lighter';
-  c.globalAlpha = .5;
-  c.drawImage(plateCv, -PLATE_W/2, -PLATE_H/2);
-  c.globalCompositeOperation = 'source-over';
-  c.globalAlpha = 1;
-  c.restore();
-
-  // Başlık bilerek ölçeğin DIŞINDA: dar kesitlerde şema küçülüyor ama yazının
-  // da küçülmesi onu okunmaz yapardı — bilgi levhasının bilgisi yazıda.
-  c.save();
-  c.translate(plateX*SC, plateY*SC);
-  c.globalAlpha = .85;
-  c.font = '700 ' + Math.max(13, Math.round(17*plateScale)) + 'px "Segoe UI","Noto Sans",Helvetica,Arial,sans-serif';
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillStyle = '#eafcff';
-  c.shadowColor = 'rgba(0,0,0,.95)'; c.shadowBlur = 9;
-  c.fillText(cap, 0, 104*plateScale + 10);
-  c.restore();
 }
 
 /* assets/bg/ içinden gelen hazır arka planı alanı kaplayacak şekilde basar. */
@@ -954,61 +881,264 @@ function drawCover(c, img){
   c.drawImage(img, (HW-w)/2, (HH-h)/2, w, h);
 }
 
+/* =========================================================================
+   İYİLEŞMİŞ SİNÜS SAHNESİ
+   Temizledikçe altından çıkan resim: her bölgenin iyileşmiş hâlinin tahtayı
+   baştan sona kaplayan tek parça illüstrasyonu (hi-bit: düz yüzeyler, birkaç
+   ton basamağı, temiz çizgi). Ortak iskelet:
+     - Boşluğun içi aydınlık, hava dolu (bölge rengine çalan ton, üstten ışık).
+     - Duvarlar boyunca pembe, nemli mukoza zarı — kesitin biçimine kendiliğinden
+       uyuyor (ızgaradaki duvara uzaklıktan), konka ve bölmelerin de çevresini
+       sarıyor.
+     - Zarın yüzeyinde silyalar, havada ışık huzmeleri, dipten tepeye yükselen
+       hava akımları ve kabarcıklar.
+   Bölgeye özel: burunda konkaların arasından akan hava; maksillerde tavanda
+   ışık saçan ostium ağzı ve tabanda diş kökleri; etmoidde ince duvarlı bal
+   peteği hücreleri ve parlayan ağızları; frontalde güçlü ışık ve dipteki
+   kanaldan yükselen hava. Hepsi deterministik (gün tohumu): aynı gün hep aynı
+   resim. Öğeler kesitin ölçülen noktalarına (tepe, dip) oturuyor ki ostium ya
+   da diş kökleri kemiğin arkasında kalmasın. Gün ilerledikçe sahne aydınlanıyor
+   (tedavi yayı). assets/bg/ içinde hazır görsel varsa sahnenin yerine o basılıyor.
+   ========================================================================= */
+const SCENE_AIR = {   // dipten tepeye
+  nasal:     ['#0c1d27','#15384a','#2c6474','#6aa9ad','#d9f1ea'],
+  maxillary: ['#120f2a','#262457','#47488f','#8a88c8','#e6e2fb'],
+  ethmoid:   ['#08182c','#123762','#2a64a0','#6aa2d6','#dcecfb'],
+  frontal:   ['#0a1f1a','#13453a','#2a7c63','#72c49f','#e2f8ea']
+};
+const SCENE_MUC = ['#4a1d2c','#8a3a4d','#c9677a','#ec9aa6'].map(hex2rgb);   // duvardan yüzeye
+const SCENE_MUC_HI = hex2rgb('#ffe0e4'), SCENE_VESSEL = hex2rgb('#a8405a');
+const sceneDist = new Float32Array(GW*GH);
+const sceneMask = makeCanvas(HW,HH), sceneOv = makeCanvas(HW,HH);
+/* Izgarada duvara (boşluk dışı hücre) uzaklık, hücre biriminde — iki geçişli
+   chamfer. Mukoza zarı ve silyalar bu alanı izliyor. */
+function sceneDistance(){
+  const D = sceneDist, INF = 1e6, R2 = Math.SQRT2;
+  for(let i=0;i<GW*GH;i++) D[i] = cavity[i] ? INF : 0;
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+    const i = y*GW+x; if(!D[i]) continue;
+    let v = D[i];
+    if(x>0) v = Math.min(v, D[i-1]+1);
+    if(y>0){ v = Math.min(v, D[i-GW]+1); if(x>0) v = Math.min(v, D[i-GW-1]+R2); if(x<GW-1) v = Math.min(v, D[i-GW+1]+R2); }
+    D[i] = v;
+  }
+  for(let y=GH-1;y>=0;y--) for(let x=GW-1;x>=0;x--){
+    const i = y*GW+x; if(!D[i]) continue;
+    let v = D[i];
+    if(x<GW-1) v = Math.min(v, D[i+1]+1);
+    if(y<GH-1){ v = Math.min(v, D[i+GW]+1); if(x<GW-1) v = Math.min(v, D[i+GW+1]+R2); if(x>0) v = Math.min(v, D[i+GW-1]+R2); }
+    D[i] = v;
+  }
+}
+/* Duvara uzaklık, ızgara biriminde herhangi bir noktada (hücre merkezleri arası bilineer) */
+function distAt(gx, gy){
+  const x = clamp(gx - .5, 0, GW-1.001), y = clamp(gy - .5, 0, GH-1.001), ix = x|0, iy = y|0, tx = x-ix, ty = y-iy, i = iy*GW+ix;
+  const a = sceneDist[i], b = sceneDist[i+1], c = sceneDist[i+GW], d = sceneDist[i+GW+1];
+  return (a + (b-a)*tx)*(1-ty) + (c + (d-c)*tx)*ty;
+}
+/* Kesitin ölçülen noktaları: tepe (ışığın girdiği yer) ve dip (havanın girdiği yer) */
+function sceneAnchors(){
+  const bb = cavBB;
+  const rowSpan = y => { let a = GW, b = -1; for(let x=0;x<GW;x++) if(cavity[y*GW+x]){ if(x < a) a = x; b = x; } return b < 0 ? null : [a, b+1]; };
+  const mid = (y0, y1) => { let s = 0, n = 0; for(let y=y0;y<y1;y++){ const r = rowSpan(y); if(r){ s += (r[0]+r[1])/2; n++; } } return n ? s/n : (bb.x0+bb.x1)/2; };
+  return { tx:mid(bb.y0, bb.y0+3), ty:bb.y0, bx:mid(bb.y1-3, bb.y1), by:bb.y1, rowSpan,
+           x0:bb.x0, x1:bb.x1, y0:bb.y0, y1:bb.y1, w:bb.x1-bb.x0, h:bb.y1-bb.y0 };
+}
 function paintHealthy(L){
   const c = bgCanvas.getContext('2d');
-  const img = c.createImageData(HW,HH), d = img.data;
-  // GOAL-016: tedavi yayı — açığa çıkan doku gün ilerledikçe koyu/morarmış
-  // tondan oksijenli turkuaza doğru açılıyor. Arka plan tek başına "kaçıncı
-  // gündeyiz" sorusuna cevap veriyor.
-  const arc = (L.day-1)/9;
-  const dim    = ['#030d12','#101d24','#27282e','#3a3138','#6a5f63'].map(hex2rgb);
-  const bright = ['#04121a','#0a3040','#0f5e63','#1b8079','#6fd8c8'].map(hex2rgb);
-  const air = dim.map((c0,i)=> mixc(c0, bright[i], arc));
-  const n1 = fbm(HW,HH,60,1777,3), n2 = fbm(HW,HH,14,5051,2);
-  for(let y=0;y<HH;y++) for(let x=0;x<HW;x++){
-    const i = y*HW+x;
-    // doku zemini: derinlik + ışık huzmesi (GOAL-009: ortam dokusu aynı kaldı,
-    // sadece prosedürel çiçek/yaprak/sap deseni kaldırıldı — bkz. drawImage aşağıda)
-    const vig = clamp(1 - Math.hypot((x/HW-.5)*1.5,(y/HH-.5)*1.6), 0, 1);
-    const shaft = sstep(.25,.9, Math.sin((x*.55 + y*1.15)/HW*3.1)*.5+.5);
-    let t = clamp(.10 + n1[i]*.48 + vig*.36 + shaft*.10 + (1-y/HH)*.12, 0, 1);
-    let col = ramp(air, t);
-    col = mixc(col, [180,255,250], n2[i]*n2[i]*.05);
-    d[i*4]=col[0]; d[i*4+1]=col[1]; d[i*4+2]=col[2]; d[i*4+3]=255;
-  }
-  c.putImageData(img,0,0);
-  // hava kabarcıkları
-  c.globalCompositeOperation = 'lighter';
-  for(let k=0;k<90;k++){
-    const x = rnd(0,HW), y = rnd(0,HH), r = rnd(3,26);
-    const g = c.createRadialGradient(x,y,0,x,y,r);
-    const al = rnd(.05,.16);
-    g.addColorStop(0,'rgba(150,240,235,'+al+')');
-    g.addColorStop(1,'rgba(150,240,235,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(x,y,r,0,7); c.fill();
-  }
-  c.globalCompositeOperation = 'source-over';
-  // GOAL-009: prosedürel çiçek yerine gerçek siklamen asseti — flood-fill
-  // reveal mekanizması (rasterRegion/dzTex) bu katmanın ÜSTÜNE bindiği için
-  // hiç dokunulmadı, sadece altta açığa çıkan görsel değişti.
-  // GOAL-016: bölüme özel hazır arka plan varsa prosedürel zeminin yerine geçer
+  c.setTransform(1,0,0,1,0,0); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
+  // GOAL-016: bölüme özel hazır arka plan varsa sahnenin yerine geçer
   const custom = bgAssetImgs['day'+String(L.day).padStart(2,'0')] || bgAssetImgs[L.cav];
-  if(custom) drawCover(c, custom);
-  else {
-    const motif = MOTIFS[L.motif];
-    if(motif){
-      // GOAL-019: tek geçişte motif fark edilmeyecek kadar sönük kalıyordu;
-      // ikinci geçiş yoğunluğu artırıyor (rastgele yerleşimli motiflerde daha
-      // çok öğe, deterministik olanlarda daha belirgin çizgi).
-      // k: kendi grubu içindeki ilerleme — aynı motif gün geçtikçe sönümleniyor
-      const first = MOTIF_BY_THEME.indexOf(L.motif), last = MOTIF_BY_THEME.lastIndexOf(L.motif);
-      const span = Math.max(1, last-first);
-      const k = clamp((L.theme-first)/span, 0, 1);
-      motif(c, k); motif(c, k);
+  if(custom){ c.fillStyle = '#081118'; c.fillRect(0,0,HW,HH); drawCover(c, custom); return; }
+  sceneDistance();
+  const A = sceneAnchors(), rg = L.region;
+  const arc = clamp((L.day-1)/Math.max(1, LEVELS.length-1), 0, 1), bright = .84 + .2*arc;
+  const air = (SCENE_AIR[rg] || SCENE_AIR.nasal).map(hex2rgb);
+  const T = rg === 'ethmoid' ? 3.2 : 4.4;                       // mukoza kalınlığı (hücre)
+  const n1 = fbmHi(46, L.day*131+7, 3), n2 = fbmHi(10, L.day*71+3, 2);
+  const img = c.createImageData(HW,HH), d = img.data;
+  const mk = sceneMask.getContext('2d'), mimg = mk.createImageData(HW,HH), md = mimg.data;
+  const col = [0,0,0], ac = [0,0,0];
+  const gsx = A.tx, gsy = A.ty - 2, gs2 = Math.pow(Math.max(A.w, A.h)*.75, 2)*.36;   // ışık kaynağı
+  for(let py=0; py<HH; py++){
+    const gy = (py+.5)/SC, v = clamp((A.y1 - gy)/Math.max(1, A.h), 0, 1);   // 0 dip, 1 tepe
+    const ly = gy - gsy;
+    for(let px=0; px<HW; px++){
+      const i = py*HW+px, gx = (px+.5)/SC;
+      const dist = distAt(gx, gy) - .5, e = T*(.62 + .8*n1[i]);
+      // hava: dipten tepeye aydınlanıyor, tepedeki kaynaktan ışık, zarın dibinde hafif gölge
+      const lx = gx - gsx, glow = Math.exp(-(lx*lx + ly*ly)/gs2);
+      const ao = 1 - sstep(e, e + 3.5, dist);
+      rampTo(air, (.14 + v*.48 + glow*.28 + (n1[i]-.5)*.12 - ao*.10)*bright, ac);
+      // mukoza: duvardan yüzeye koyudan açığa, damarlar, nemli yüzey parıltısı
+      const m = clamp(dist/e, 0, 1), fold = Math.sin(n2[i]*18)*.5 + .5;   // ince kıvrımlar
+      rampTo(SCENE_MUC, Math.pow(m, .85)*(.86 + fold*.14), col);
+      const rid = Math.pow(1 - Math.abs(n2[i]*2 - 1), 3);
+      mixTo(col, SCENE_VESSEL, rid*(1-m)*.45);
+      mixTo(col, SCENE_MUC_HI, sstep(.78,.95,m)*(1 - sstep(.95,1,m))*.6 + glow*m*.12);
+      const aw = sstep(e - .22, e + .22, dist);                 // havanın payı
+      mixTo(col, ac, aw);
+      d[i*4] = col[0]; d[i*4+1] = col[1]; d[i*4+2] = col[2]; d[i*4+3] = 255;
+      md[i*4+3] = aw*255;
     }
   }
-  // GOAL-017: siklamenin yerini günün mekanizmasını anlatan bilgi levhası aldı
-  paintPlate(c, L);
+  c.putImageData(img, 0, 0);
+  mk.putImageData(mimg, 0, 0);
+  // vektör katmanlar (gün tohumlu)
+  let sd = (L.day*2654435761 + 97)>>>0;
+  const R = () => (sd = (sd*1664525 + 1013904223)>>>0)/4294967296;
+  sceneLayer(c, o => sceneRays(o, A, R, rg === 'frontal' ? 1.25 : 1), true, 'lighter');
+  if(rg === 'ethmoid') sceneLayer(c, o => sceneHoneycomb(o, A, R), true);
+  sceneLayer(c, o => sceneAirflow(o, A, R, rg), true, 'lighter');
+  sceneLayer(c, o => sceneBubbles(o, A, R, rg === 'frontal' ? 40 : 24), true);
+  sceneLayer(c, o => sceneCilia(o, R, T, n1), false);
+  if(rg === 'maxillary'){ sceneLayer(c, o => sceneTeeth(o, A), false); sceneLayer(c, o => sceneOstium(o, A), false, 'lighter'); }
+  if(rg === 'ethmoid') sceneLayer(c, o => sceneOpenings(o, A, R), true);
+  if(rg === 'frontal') sceneLayer(c, o => sceneDuct(o, A), false, 'lighter');
+}
+/* Bir vektör katmanı: ayrı tuvalde (ızgara biriminde) çiziliyor, istenirse
+   yalnızca havaya kırpılıyor (mukozanın üstüne taşmasın), sonra zemine basılıyor. */
+function sceneLayer(c, draw, airOnly, blend){
+  const o = sceneOv.getContext('2d');
+  o.setTransform(1,0,0,1,0,0); o.globalCompositeOperation = 'source-over'; o.globalAlpha = 1;
+  o.clearRect(0,0,HW,HH);
+  o.setTransform(SC,0,0,SC,0,0); o.lineCap = 'round'; o.lineJoin = 'round';
+  o.save(); draw(o); o.restore();
+  if(airOnly){
+    o.setTransform(1,0,0,1,0,0); o.globalCompositeOperation = 'destination-in';
+    o.drawImage(sceneMask, 0, 0); o.globalCompositeOperation = 'source-over';
+  }
+  c.save(); c.setTransform(1,0,0,1,0,0); c.globalCompositeOperation = blend || 'source-over';
+  c.drawImage(sceneOv, 0, 0); c.restore();
+}
+/* Tepeden yelpaze gibi inen ışık huzmeleri */
+function sceneRays(o, A, R, k){
+  const ox = A.tx, oy = A.ty - 3, len = A.h*1.05, n = k > 1 ? 9 : 7;
+  for(let j=0;j<n;j++){
+    const a = (j/(n-1) - .5)*1.05 + (R()-.5)*.12, w = .04 + R()*.05;
+    const g = o.createLinearGradient(ox, oy, ox + Math.sin(a)*len, oy + Math.cos(a)*len);
+    g.addColorStop(0, 'rgba(255,250,235,'+(.12*k).toFixed(3)+')');
+    g.addColorStop(.6, 'rgba(255,250,235,'+(.05*k).toFixed(3)+')');
+    g.addColorStop(1, 'rgba(255,250,235,0)');
+    o.fillStyle = g; o.beginPath(); o.moveTo(ox, oy);
+    o.lineTo(ox + Math.sin(a - w)*len, oy + Math.cos(a - w)*len);
+    o.lineTo(ox + Math.sin(a + w)*len, oy + Math.cos(a + w)*len); o.closePath(); o.fill();
+  }
+  const g = o.createRadialGradient(ox, oy+2, 0, ox, oy+2, Math.max(8, A.w*.45));
+  g.addColorStop(0, 'rgba(255,248,230,'+(.16*k).toFixed(3)+')'); g.addColorStop(1, 'rgba(255,248,230,0)');
+  o.fillStyle = g; o.fillRect(A.x0-6, A.y0-6, A.w+12, A.h+12);
+}
+/* Dipten (havanın girdiği yer) tepeye yükselen hava akımları */
+function sceneAirflow(o, A, R, rg){
+  const n = rg === 'frontal' ? 11 : rg === 'nasal' ? 10 : 8;
+  for(let k=0;k<n;k++){
+    const f = k/(n-1) - .5, x0 = A.bx + f*A.w*.55, x1 = A.tx + f*A.w*.35, ph = R()*6, fr = 1.3 + R()*.5;
+    const pts = [];
+    for(let j=0;j<=7;j++){
+      const t = j/7, y = lerp(A.y1 + 1, A.y0 - 1, t);
+      pts.push([lerp(x0, x1, sstep(0,1,t)) + Math.sin(t*Math.PI*fr + ph)*A.w*.06*(1 - Math.abs(f)), y]);
+    }
+    const a = .10 + R()*.12, g = o.createLinearGradient(0, A.y1, 0, A.y0);
+    g.addColorStop(0, 'rgba(200,255,248,0)'); g.addColorStop(.3, 'rgba(200,255,248,'+a.toFixed(3)+')');
+    g.addColorStop(.8, 'rgba(230,255,252,'+(a*.8).toFixed(3)+')'); g.addColorStop(1, 'rgba(230,255,252,0)');
+    o.strokeStyle = g; o.lineWidth = .35 + R()*.7;
+    o.beginPath(); splinePath(o, pts, false); o.stroke();
+  }
+}
+/* Havada süzülen kabarcıklar (parlak kenar + küçük ışık) */
+function sceneBubbles(o, A, R, n){
+  for(let k=0;k<n;k++){
+    const x = A.x0 + R()*A.w, y = A.y0 + R()*A.h, r = .35 + R()*R()*1.4;
+    o.fillStyle = 'rgba(220,255,250,.10)'; o.beginPath(); o.arc(x, y, r, 0, 7); o.fill();
+    o.strokeStyle = 'rgba(230,255,252,.45)'; o.lineWidth = .14; o.stroke();
+    o.fillStyle = 'rgba(255,255,255,.75)'; o.beginPath(); o.arc(x - r*.35, y - r*.35, r*.22, 0, 7); o.fill();
+  }
+}
+/* Mukoza yüzeyindeki silyalar: zarın iç yüzeyinden havaya, yukarıya (ostiuma)
+   doğru eğilen kısa teller. Yön, duvara uzaklık alanının eğiminden. */
+function sceneCilia(o, R, T, n1){
+  o.strokeStyle = 'rgba(255,224,228,.55)'; o.lineWidth = .16;
+  o.beginPath();
+  for(let y=1;y<GH-1;y++) for(let x=1;x<GW-1;x++){
+    const i = y*GW+x; if(!cavity[i]) continue;
+    const px = Math.min(HW-1, ((x+.5)*SC)|0), py = Math.min(HH-1, ((y+.5)*SC)|0);
+    const dist = sceneDist[i] - .5, e = T*(.62 + .8*n1[py*HW+px]);
+    if(Math.abs(dist - e) > .5 || ((i*2654435761)>>>0) % 3) continue;
+    let nx = sceneDist[i+1] - sceneDist[i-1], ny = sceneDist[i+GW] - sceneDist[i-GW];
+    const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+    let tx = -ny, ty = nx; if(ty > 0){ tx = -tx; ty = -ty; }
+    const bx = x + .5 + nx*(e - dist), by = y + .5 + ny*(e - dist), len = 1.1 + R()*.6;
+    o.moveTo(bx, by);
+    o.quadraticCurveTo(bx + nx*len*.6, by + ny*len*.6, bx + nx*len + tx*len*.45, by + ny*len + ty*len*.45);
+  }
+  o.stroke();
+}
+/* Maksiller: tavanda ışık saçan ostium ağzı */
+function sceneOstium(o, A){
+  const x = A.tx, y = A.ty + 1.8, r = 2.6;
+  const g = o.createRadialGradient(x, y, 0, x, y, r*6);
+  g.addColorStop(0, 'rgba(255,250,230,.34)'); g.addColorStop(.35, 'rgba(255,240,210,.12)'); g.addColorStop(1, 'rgba(255,240,210,0)');
+  o.fillStyle = g; o.beginPath(); o.arc(x, y, r*6, 0, 7); o.fill();
+  o.fillStyle = 'rgba(255,250,236,.55)'; o.beginPath(); o.ellipse(x, y, r, r*.55, 0, 0, 7); o.fill();
+  o.strokeStyle = 'rgba(255,214,222,.8)'; o.lineWidth = .3; o.stroke();
+}
+/* Maksiller: tabanın hemen altındaki diş kökleri — mukozanın altından
+   kabaran yuvarlak tepecikler (her biri iki köklü bir azı dişi gibi) */
+function sceneTeeth(o, A){
+  const yy = Math.max(A.y0, A.y1 - 6), sp = A.rowSpan(yy);
+  if(!sp) return;
+  const w = sp[1] - sp[0], n = w > 26 ? 3 : w > 14 ? 2 : 1;
+  for(let k=0;k<n;k++){
+    const x = sp[0] + w*(k+1)/(n+1), top = A.y1 - 4.2 + (k%2)*.6, bw = 3.2;
+    const g = o.createLinearGradient(0, top, 0, A.y1 + 1);
+    g.addColorStop(0, 'rgba(246,234,214,.80)'); g.addColorStop(1, 'rgba(214,188,160,.55)');
+    o.fillStyle = g;
+    o.beginPath();                                   // iki tepecik
+    o.moveTo(x - bw, A.y1 + 2);
+    o.bezierCurveTo(x - bw, top - .2, x - .4, top - .2, x, top + 1.1);
+    o.bezierCurveTo(x + .4, top - .2, x + bw, top - .2, x + bw, A.y1 + 2);
+    o.closePath(); o.fill();
+    o.fillStyle = 'rgba(236,154,166,.42)';           // üstteki mukoza örtüsü
+    o.fill();
+    o.strokeStyle = 'rgba(255,236,238,.6)'; o.lineWidth = .22;   // nemli üst kenar
+    o.beginPath(); o.moveTo(x - bw*.8, top + 1.4); o.bezierCurveTo(x - bw*.7, top, x - .5, top, x - .15, top + .9); o.stroke();
+  }
+}
+/* Etmoid: bal peteği — ince, ışık geçiren hücre duvarları */
+function sceneHoneycomb(o, A, R){
+  const s = 5.2, hh = s*Math.sqrt(3)/2;
+  o.lineWidth = .22;
+  for(let col=-1; col*s*1.5 < A.w + s*2; col++){
+    for(let row=-1; row*hh*2 < A.h + hh*3; row++){
+      const cx = A.x0 + col*s*1.5, cy = A.y0 + row*hh*2 + (col & 1 ? hh : 0);
+      o.beginPath();
+      for(let k=0;k<6;k++){ const a = k/6*Math.PI*2; const px = cx + Math.cos(a)*s*.94, py = cy + Math.sin(a)*s*.94;
+        if(k) o.lineTo(px, py); else o.moveTo(px, py); }
+      o.closePath();
+      const g = o.createRadialGradient(cx, cy - s*.3, 0, cx, cy, s);
+      g.addColorStop(0, 'rgba(225,240,255,'+(.04 + R()*.07).toFixed(3)+')'); g.addColorStop(1, 'rgba(225,240,255,0)');
+      o.fillStyle = g; o.fill();
+      o.strokeStyle = 'rgba(225,240,255,.30)'; o.stroke();
+    }
+  }
+}
+/* Etmoid: hücrelerin açılan ağızları (turkuaz ışıklı) */
+function sceneOpenings(o, A, R){
+  for(let k=0;k<9;k++){
+    const x = A.x0 + (.12 + R()*.76)*A.w, y = A.y0 + (.1 + R()*.8)*A.h, r = .9 + R()*.8;
+    const g = o.createRadialGradient(x, y, 0, x, y, r*3.2);
+    g.addColorStop(0, 'rgba(120,250,236,.45)'); g.addColorStop(1, 'rgba(120,250,236,0)');
+    o.fillStyle = g; o.beginPath(); o.arc(x, y, r*3.2, 0, 7); o.fill();
+    o.fillStyle = 'rgba(8,30,52,.75)'; o.beginPath(); o.ellipse(x, y, r, r*.7, 0, 0, 7); o.fill();
+    o.strokeStyle = 'rgba(150,255,240,.85)'; o.lineWidth = .22; o.stroke();
+  }
+}
+/* Frontal: dipteki uzun kanaldan (frontal resess) yükselen parlak hava */
+function sceneDuct(o, A){
+  const x = A.bx, y = A.by - 1.5;
+  const g = o.createRadialGradient(x, y, 0, x, y, 9);
+  g.addColorStop(0, 'rgba(210,255,240,.45)'); g.addColorStop(1, 'rgba(210,255,240,0)');
+  o.fillStyle = g; o.beginPath(); o.arc(x, y, 9, 0, 7); o.fill();
 }
 
 /* ---- hastalıklı doku rengi (alfa ayrı hesaplanır) ---- */
@@ -1016,17 +1146,17 @@ const tissueRGB = new Uint8ClampedArray(HW*HH*3);
 function paintTissue(L){
   const cols = L.pal.map(hex2rgb);
   const stops = [cols[0], cols[1], cols[2], cols[3]];
-  const n1 = fbm(HW,HH,42,L.day*977+31,3);
-  const n2 = fbm(HW,HH,11,L.day*613+7,3);
+  const n1 = fbmHi(42,L.day*977+31,3);
+  const n2 = fbmHi(11,L.day*613+7,3);
+  const col = [0,0,0];
   for(let y=0;y<HH;y++) for(let x=0;x<HW;x++){
     const i = y*HW+x;
     const core = clamp(1 - Math.hypot((x/HW-.5)*1.9,(y/HH-.5)*1.9), 0, 1);
     const ridged = Math.pow(1-Math.abs(n2[i]*2-1), 2.4);      // damar filamentleri
-    let t = clamp(n1[i]*.72 + core*.34 - .12, 0, 1);
-    let col = ramp(stops, t);
-    col = mixc(col, cols[3], ridged*.55*(.35+core*.65));       // parlayan damarlar
-    const crev = Math.pow(n1[i], 3)*.5;                        // koyu yarıklar
-    col = mixc(col, cols[0], crev);
+    rampTo(stops, n1[i]*.72 + core*.34 - .12, col);
+    mixTo(col, cols[3], ridged*.55*(.35+core*.65));            // parlayan damarlar
+    const v = n1[i];
+    mixTo(col, cols[0], v*v*v*.5);                             // koyu yarıklar
     tissueRGB[i*3]=col[0]; tissueRGB[i*3+1]=col[1]; tissueRGB[i*3+2]=col[2];
   }
 }
@@ -1195,22 +1325,199 @@ function anatDisease(region, side, d){
   return out;
 }
 const sideKey = sg => sg < 0 ? 'sol' : 'sag';
-/* Her bölümün tahtası: hangi yapılar, iki taraf mı, üstten/alttan kırpılıyor
-   mu. Pencere bu yapıların sınır kutusu. Burun boşluğunun gözlerin arasına
-   uzanan dar kolonu burun ve maksiller günlerinde tepeden kırpılıyor — tahtayı
-   boyuna uzatıp alanı daraltıyordu; etmoid gününde ise kolon asıl yol, orada
-   burnun aşağıda genişleyen kısmı kırpılıyor ve konkaları çizilmiyor. */
+/* Her bölümün tahtası: hangi yapılar, iki taraf mı (both), üstten/alttan
+   kırpılıyor mu. Pencere bu yapıların sınır kutusu. Burun boşluğunun gözlerin
+   arasına uzanan dar kolonu burun ve maksiller günlerinde tepeden kırpılıyor —
+   tahtayı boyuna uzatıp alanı daraltıyordu; etmoid gününde ise kolon asıl yol,
+   orada burnun aşağıda genişleyen kısmı kırpılıyor ve konkaları çizilmiyor.
+   Burun boşluğu da artık diğerleri gibi iki ayrı bölüm: 1. gün sol, 2. gün
+   sağ yarım (septumun iki yanı). */
 const BOARDS = {
-  nasal:     { both:true, parts:['nasal'], clipY0:IMG([0,213])[1] },
+  nasal:     { parts:['nasal'], clipY0:IMG([0,224])[1] },   // tek yarımda kolon tahtayı fazla uzatıyordu
   maxillary: { parts:['maxillary','nasal'], clipY0:IMG([0,213])[1] },
   ethmoid:   { parts:['ethmoid','nasal'], clipY:IMG([0,238])[1], noWalls:['nasal'] },
   frontal:   { parts:['frontal'] }
 };
 /* Eski kesitlerin hücre alanı — yeni tahtaların ölçeği buna göre (gün dengesi) */
 const AREA_BY_DAY = [7839,7517, 6989,6663, 6620,6548, 5698,5378];
-function boardWindow(region, side){
+/* Harita görselleri (assets/board): koyu lacivert zeminin üstünde kızarık bir
+   boşluk. Boşluk, kırmızının maviyi geçtiği pikseller; zemindeki soluk
+   desenler ayrı küçük parçalar olarak kalıyor, en büyük parça tutulup içindeki
+   koyu lekeler dolduruluyor. Sonuç boşluğun kutusuna kırpılmış beyaz maske. */
+const boardMasks = {};
+function boardMask(img){
+  const sc = Math.min(1, 960/Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width*sc)), h = Math.max(1, Math.round(img.height*sc));
+  const src = makeCanvas(w, h), sctx = src.getContext('2d');
+  sctx.drawImage(img, 0, 0, w, h);
+  const px = sctx.getImageData(0, 0, w, h).data, N = w*h;
+  const red = new Uint8Array(N);
+  for(let i=0;i<N;i++){ const r = px[i*4], b = px[i*4+2]; red[i] = (r > b + 10 && r > 28) ? 1 : 0; }
+  // en büyük bağlı kızarık parça
+  const comp = new Int32Array(N).fill(-1), q = new Int32Array(N);
+  let id = 0, best = -1, bestN = 0;
+  for(let s=0;s<N;s++){
+    if(!red[s] || comp[s] >= 0) continue;
+    let qh = 0, qt = 0; comp[s] = id; q[qt++] = s;
+    while(qh < qt){
+      const i = q[qh++], x = i%w;
+      if(x>0   && red[i-1] && comp[i-1] < 0){ comp[i-1] = id; q[qt++] = i-1; }
+      if(x<w-1 && red[i+1] && comp[i+1] < 0){ comp[i+1] = id; q[qt++] = i+1; }
+      if(i>=w  && red[i-w] && comp[i-w] < 0){ comp[i-w] = id; q[qt++] = i-w; }
+      if(i<N-w && red[i+w] && comp[i+w] < 0){ comp[i+w] = id; q[qt++] = i+w; }
+    }
+    if(qt > bestN){ bestN = qt; best = id; }
+    id++;
+  }
+  // dışarıdan ulaşılamayan her şey boşluğun parçası (iç lekeler dolsun)
+  const out = new Uint8Array(N); let qh = 0, qt = 0;
+  const push = i => { if(!out[i] && comp[i] !== best){ out[i] = 1; q[qt++] = i; } };
+  for(let x=0;x<w;x++){ push(x); push(N-w+x); }
+  for(let y=0;y<h;y++){ push(y*w); push(y*w+w-1); }
+  while(qh < qt){
+    const i = q[qh++], x = i%w;
+    if(x>0) push(i-1); if(x<w-1) push(i+1); if(i>=w) push(i-w); if(i<N-w) push(i+w);
+  }
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for(let i=0;i<N;i++) if(!out[i]){ const x = i%w, y = (i/w)|0;
+    if(x<x0) x0 = x; if(x>x1) x1 = x; if(y<y0) y0 = y; if(y>y1) y1 = y; }
+  if(x1 < x0) return null;
+  const mw = x1-x0+1, mh = y1-y0+1, cv = makeCanvas(mw, mh), mctx = cv.getContext('2d');
+  const md = mctx.createImageData(mw, mh), d = md.data;
+  for(let y=0;y<mh;y++) for(let x=0;x<mw;x++) if(!out[(y+y0)*w + x+x0]){
+    const k = (y*mw+x)*4; d[k] = d[k+1] = d[k+2] = d[k+3] = 255;
+  }
+  mctx.putImageData(md, 0, 0);
+  /* Kontur (Moore komşuluk izi): yüz haritası sinüsü bu biçimle çiziyor.
+     Piksel basamakları yay uzunluğuna göre seyrek örneklenip eğriye
+     (splinePath) bırakılıyor. */
+  const ins = (x, y) => x >= 0 && y >= 0 && x < mw && y < mh && !out[(y+y0)*w + x+x0];
+  const DX = [1,1,0,-1,-1,-1,0,1], DY = [0,1,1,1,0,-1,-1,-1];
+  const dirOf = (dx, dy) => { for(let k=0;k<8;k++) if(DX[k] === dx && DY[k] === dy) return k; return 4; };
+  let sx = 0; while(sx < mw && !ins(sx, 0)) sx++;
+  let cx = sx, cy = 0, bx = sx-1, by = 0, f0 = null;
+  const ring = [[sx, 0]];
+  for(let it=0; it<4*(mw+mh)*8; it++){
+    const b = dirOf(bx-cx, by-cy); let nx = -1, ny = -1;
+    for(let k=1;k<=8;k++){
+      const dd = (b+k)%8, tx = cx+DX[dd], ty = cy+DY[dd];
+      if(ins(tx, ty)){ nx = tx; ny = ty; const pd = (b+k-1)%8; bx = cx+DX[pd]; by = cy+DY[pd]; break; }
+    }
+    if(nx < 0) break;
+    if(!f0) f0 = [nx, ny];
+    else if(cx === sx && cy === 0 && nx === f0[0] && ny === f0[1]) break;
+    cx = nx; cy = ny; ring.push([cx, cy]);
+  }
+  if(ring.length > 1 && ring[ring.length-1][0] === sx && ring[ring.length-1][1] === 0) ring.pop();
+  const cum = [0];
+  for(let i=1;i<=ring.length;i++){ const a = ring[i-1], c2 = ring[i % ring.length];
+    cum.push(cum[i-1] + Math.hypot(c2[0]-a[0], c2[1]-a[1])); }
+  const per = cum[ring.length], NP = 84, contour = [];
+  for(let j=0, i=0; j<NP; j++){
+    const t = per*j/NP; while(i < ring.length-1 && cum[i+1] < t) i++;
+    const a = ring[i], c2 = ring[(i+1) % ring.length], u = (t - cum[i]) / Math.max(1e-6, cum[i+1]-cum[i]);
+    contour.push([lerp(a[0], c2[0], u) + .5, lerp(a[1], c2[1], u) + .5]);
+  }
+  const pa = polyAreaCentroid(contour);
+  return { cv, ar:mh/mw, w:mw, h:mh, contour, area:pa.a, cx:pa.cx, cy:pa.cy };
+}
+/* Çokgenin alanı ve ağırlık merkezi (shoelace) */
+function polyAreaCentroid(P){
+  let a = 0, x = 0, y = 0;
+  for(let i=0;i<P.length;i++){
+    const p = P[i], q = P[(i+1) % P.length], cr = p[0]*q[1] - q[0]*p[1];
+    a += cr; x += (p[0]+q[0])*cr; y += (p[1]+q[1])*cr;
+  }
+  a /= 2;
+  return Math.abs(a) < 1e-12 ? { a:0, cx:P[0][0], cy:P[0][1] } : { a:Math.abs(a), cx:x/(6*a), cy:y/(6*a) };
+}
+/* Harita görseli olan sinüs, yüz haritasında da o biçimle duruyor: kontur,
+   eski çizimin alanıyla ve yüksekliğinde (ağırlık merkezi) oturtulup ANAT'ın
+   yerine geçiyor. Yatayda orta hattaki kenarı eski kenarla hizalı — daha
+   geniş bir biçim burun boşluğunun üstüne taşmasın, yanağa doğru büyüsün.
+   Yani harita, dalış ve tahta yine tek bir biçimden geliyor; görselin yüz
+   uzayındaki kutusu tahtanın penceresi oluyor (art.win). */
+/* Dikeyde hangi kenar eski çizimle hizalanıyor: maksillerin tavanı göz
+   çukurunun tabanıdır (hemen gözün altında), frontalin tabanı etmoidin ve
+   göz çukurunun üstüne oturur. Diğerleri ağırlık merkezinden. */
+const ART_VALIGN = { maxillary:'top', frontal:'bottom' };
+function applyBoardArtToAnatomy(){
+  for(const rg in ANAT) for(const sd of ['sol','sag']){
+    const art = boardMasks[rg + '_' + sd];
+    if(!art || !art.area || !ANAT[rg][sd]) continue;
+    const prev = ANAT[rg][sd], old = polyAreaCentroid(prev), s = Math.sqrt(old.a/art.area);
+    const xs = P => P.map(p => p[0]), ys = P => P.map(p => p[1]), medial = sd === 'sol' ? Math.max : Math.min;
+    const dx = medial(...xs(prev)) - (old.cx + (medial(...xs(art.contour)) - art.cx)*s);
+    const va = ART_VALIGN[rg];
+    const dy = va === 'top' ? Math.min(...ys(prev)) - (old.cy + (Math.min(...ys(art.contour)) - art.cy)*s)
+             : va === 'bottom' ? Math.max(...ys(prev)) - (old.cy + (Math.max(...ys(art.contour)) - art.cy)*s) : 0;
+    const X = x => old.cx + (x - art.cx)*s + dx, Y = y => old.cy + (y - art.cy)*s + dy;
+    ANAT[rg][sd] = art.contour.map(p => [X(p[0]), Y(p[1])]);
+    art.win = [X(0), Y(0), X(art.w), Y(art.h)];
+  }
+  buildDrainage();
+}
+/* =========================================================================
+   DRENAJ YOLLARI (yüz haritası)
+   Sinüslerin burna gerçekte açıldığı yerler, önden görünümde sadeleştirilmiş:
+     - Maksiller: ağzı iç duvarın ÜST köşesinde; infundibulumdan yukarı-içe
+       çıkıp orta meatusa (orta konkanın altı, burnun yan duvarı) açılıyor.
+     - Frontal: dipteki frontal resessten aşağı iniyor, etmoid ile burnun üst
+       kolonu arasından geçip orta meatus bölgesine (OMC) açılıyor.
+     - Etmoid: hücre ağızları burnun üst kolonuna (üst/orta meatus).
+   İlacın yolu da bunları izliyor: burun deliğinden septum boyunca ortak
+   meatusla yukarı, orta konkanın altından orta meatusa, oradan kanalla sinüse.
+   Noktalar görsel pikseli (sinuzit.jfif), sağ taraf kendi geometrisinden.
+   ========================================================================= */
+const DRAIN = {
+  sol: { nostril:[156,272], low:[164,262], under:[164,247], tuck:[157,247.5], meatusLo:[151.8,245],
+         meatus:[153,237], omc:[163.8,229], gap:162.3, ethDuct:[160,231] },
+  sag: { nostril:[181,272], low:[174,262], under:[174,247], tuck:[180.5,247.5], meatusLo:[186.8,245],
+         meatus:[186.3,237], omc:[175.4,229], gap:177.5, ethDuct:[180.5,228] }
+};
+function buildDrainage(){
+  for(const sd of ['sol','sag']){
+    const D = DRAIN[sd], m = sd === 'sol' ? 1 : -1;     // m: içe (burna) doğru x yönü
+    // maksiller: iç duvarın üst köşesi → biraz yukarı-içe → orta meatus
+    const MX = ANAT.maxillary[sd];
+    let so = MX[0], best = -1e9;
+    for(const q of MX){ const sc = m*q[0]*1.6 - q[1]; if(sc > best){ best = sc; so = q; } }
+    const meat = IMG(D.meatus), mid = [lerp(so[0], meat[0], .45), Math.min(so[1], meat[1]) - .018];
+    const mxDuct = [so, mid, meat];
+    const k = ANAT_DUCTS.findIndex(d => d[0] === 'maxillary' && d[1] === sd);
+    if(k >= 0) ANAT_DUCTS[k][2] = mxDuct;
+    D.maxDuct = mxDuct;
+    // frontal: tabanın en alt noktası → etmoid ile kolon arasındaki aralıktan aşağı → OMC
+    const FR = ANAT.frontal[sd];
+    let fb = FR[0]; for(const q of FR) if(q[1] > fb[1]) fb = q;
+    const frDuct = [fb, IMG([D.gap, 205]), IMG([D.gap, 222]), IMG(D.omc)];
+    const j = ANAT_DUCTS.findIndex(d => d[0] === 'frontal' && d[1] === sd);
+    if(j >= 0) ANAT_DUCTS[j][2] = frDuct; else ANAT_DUCTS.push(['frontal', sd, frDuct, .02, 'map']);
+    D.frDuct = frDuct;
+  }
+}
+/* Günün harita görseli: önce güne özel, sonra bölge + taraf. */
+function boardArt(L){
+  return boardMasks['day' + String(L.day).padStart(2,'0')] || boardMasks[L.region + '_' + L.side]
+      || (BOARDS[L.region].both ? boardMasks[L.region] : null) || null;
+}
+/* Tahtada olan yapılar: harita görselli günlerde yalnızca günün sinüsü */
+const boardParts = L => boardArt(L) ? [L.region] : BOARDS[L.region].parts;
+function boardWindow(region, side, art){
   const B0 = BOARDS[region], sides = B0.both ? ['sol','sag'] : [side];
   let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
+  if(art && art.win) return art.win;        // biçimi haritada da olan görsel
+  if(art){
+    /* Yalnızca güne özel görsel (dayNN): yüz haritasındaki sinüsün yerine ve
+       kabaca onun büyüklüğünde oturuyor, dalış haritadaki sinüse iniyor. Asıl
+       ölçeği yine fitBoard (alan hedefi) belirliyor. */
+    for(const sd of sides) for(const p of ANAT[region][sd]){
+      x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+    }
+    const S = Math.sqrt((x1-x0)*(y1-y0)), ww = S/Math.sqrt(art.ar), wh = S*Math.sqrt(art.ar);
+    const cx = (x0+x1)/2, cy = (y0+y1)/2;
+    return [cx - ww/2, cy - wh/2, cx + ww/2, cy + wh/2];
+  }
   for(const sd of sides) for(const rg of B0.parts) for(const p of ANAT[rg][sd]){
     if(B0.clipY !== undefined && p[1] > B0.clipY) continue;
     if(B0.clipY0 !== undefined && p[1] < B0.clipY0) continue;
@@ -1227,11 +1534,18 @@ function roundRectPath(c, x0, y0, x1, y1, r){
 /* Tahtayı yüz uzayında çizer (çağıran dönüşümü kurar). Beyaz = boşluk. */
 function paintBoard(c, L){
   const B0 = BOARDS[L.region], sides = B0.both ? ['sol','sag'] : [L.side];
+  const art = boardArt(L);
+  if(art){                                  // harita görseli: maskesi pencereye
+    const w = L.win;
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(art.cv, w[0], w[1], w[2]-w[0], w[3]-w[1]);
+    return;
+  }
   c.lineCap = 'round'; c.lineJoin = 'round';
   c.fillStyle = '#fff';
   for(const sd of sides){
     for(const rg of B0.parts) blob(c, ANAT[rg][sd]);
-    for(const d of ANAT_DUCTS) if(d[1] === sd && B0.parts.includes(d[0])) lamella(c, d[2], d[3]);
+    for(const d of ANAT_DUCTS) if(d[1] === sd && B0.parts.includes(d[0]) && d[4] !== 'map') lamella(c, d[2], d[3]);
   }
   c.fillStyle = '#000';
   for(const w of ANAT_WALLS) if(sides.includes(w[1]) && B0.parts.includes(w[0]) && !(B0.noWalls || []).includes(w[0]))
@@ -1266,7 +1580,7 @@ function fitBoard(L, count){
   return place(k);
 }
 
-const shapeCv = makeCanvas(HW,HH), shapeCtx = shapeCv.getContext('2d');
+const shapeCv = makeCanvas(HW,HH), shapeCtx = shapeCv.getContext('2d', { willReadFrequently:true });
 
 /* Boşluğa ulaşılamayan cepleri duvara çevirir. Şekiller elle çizildiği için
    bir oda yanlışlıkla mühürlenirse alan hedefi imkânsız hale gelirdi; bu ağ
@@ -1312,30 +1626,34 @@ function measureRows(){
 }
 
 /* GOAL-034: kesit, tek anatomi çiziminin günün penceresi (bkz. paintBoard). */
-function rasterBoard(L, f){
-  const c = shapeCtx;
+/* lo: yerleşim denemeleri için eski (AU) çözünürlükte — yalnızca hücre
+   merkezleri sayılıyor, tam çözünürlük son çizime kalıyor. */
+const shapeLoCv = makeCanvas(VW,VH), shapeLoCtx = shapeLoCv.getContext('2d', { willReadFrequently:true });
+function rasterBoard(L, f, lo){
+  const c = lo ? shapeLoCtx : shapeCtx, S = lo ? AU : SC, W = GW*S, H = GH*S;
   c.setTransform(1,0,0,1,0,0);
   c.globalCompositeOperation = 'source-over';
-  c.fillStyle = '#000'; c.fillRect(0,0,HW,HH);
-  c.setTransform(SC*f.k,0,0,SC*f.k, SC*f.gx0, SC*f.gy0);
+  c.fillStyle = '#000'; c.fillRect(0,0,W,H);
+  c.setTransform(S*f.k,0,0,S*f.k, S*f.gx0, S*f.gy0);
   paintBoard(c, L);
   c.setTransform(1,0,0,1,0,0);
-  return c.getImageData(0,0,HW,HH).data;
+  return c.getImageData(0,0,W,H).data;
 }
-function sampleCavity(raw){
+function sampleCavity(raw, lo){
+  const S = lo ? AU : SC, W = GW*S, H = GH*S;
   cavity.fill(0);
   let n = 0;
   for(let y=B;y<GH-B;y++) for(let x=B;x<GW-B;x++){
-    const px = Math.min(HW-1, ((x+.5)*SC)|0), py = Math.min(HH-1, ((y+.5)*SC)|0);
-    if(raw[(py*HW+px)*4] > 127){ cavity[y*GW+x] = 1; n++; }
+    const px = Math.min(W-1, ((x+.5)*S)|0), py = Math.min(H-1, ((y+.5)*S)|0);
+    if(raw[(py*W+px)*4] > 127){ cavity[y*GW+x] = 1; n++; }
   }
   return n;
 }
 function buildCavity(L){
   // GOAL-034: günün penceresi ve hedef alanı (anatomi tanımı LEVELS'tan sonra geliyor)
-  L.win  = boardWindow(L.region, L.side);
+  L.win  = boardWindow(L.region, L.side, boardArt(L));
   L.area = L.areaT || AREA_BY_DAY[L.day-1];   // areaT: günün ayar tablosu (GOAL-037)
-  const f = fitBoard(L, g => sampleCavity(rasterBoard(L, g)));
+  const f = fitBoard(L, g => sampleCavity(rasterBoard(L, g, true), true));
   L.face = f;                    // giriş sahnesi dalışı bu yerleşime iniyor
   const raw = rasterBoard(L, f);
   sampleCavity(raw);
@@ -1348,16 +1666,22 @@ function buildCavity(L){
     for(let py=gy*SC; py<gy*SC+SC; py++) for(let px=gx*SC; px<gx*SC+SC; px++) raw[(py*HW+px)*4] = 0;
   }
 
-  // yumuşatılmış maske — duvar dokusunun kenarı tırtıklı olmasın
-  const edgePx = B*SC;
+  // yumuşatılmış maske — duvar dokusunun kenarı tırtıklı olmasın. Kutu
+  // bulanıklığı (iki geçiş) hücre biriminde eski genişlikte: yarıçap PX piksel,
+  // yani çözünürlük artınca kenar daha düzgün ama aynı kalınlıkta.
+  const edgePx = B*SC, R = Math.max(1, Math.round(PX)), tmp = new Float32Array(HW*HH);
+  for(let y=0;y<HH;y++){
+    const row = y*HW;
+    for(let x=0;x<HW;x++){
+      let s = 0, n = 0;
+      for(let dx=-R;dx<=R;dx++){ const px = x+dx; if(px<0||px>=HW) continue; s += raw[(row+px)*4]; n++; }
+      tmp[row+x] = s/n;
+    }
+  }
   for(let y=0;y<HH;y++) for(let x=0;x<HW;x++){
     if(x<edgePx||y<edgePx||x>=HW-edgePx||y>=HH-edgePx){ cavSoft[y*HW+x] = 0; continue; }
     let s = 0, n = 0;
-    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-      const px = x+dx, py = y+dy;
-      if(px<0||py<0||px>=HW||py>=HH) continue;
-      s += raw[(py*HW+px)*4]; n++;
-    }
+    for(let dy=-R;dy<=R;dy++){ const py = y+dy; if(py<0||py>=HH) continue; s += tmp[py*HW+x]; n++; }
     cavSoft[y*HW+x] = s/n/255;
   }
   for(let i=0;i<HW*HH;i++) cavM[i] = clamp((cavSoft[i]-.5)*2.6 + .5, 0, 1);
@@ -1381,18 +1705,11 @@ function buildCavity(L){
        enini doldurabiliyor, artan kemik ekran dışında kalıyor. */
     cavBB = { x0:bx0, y0:by0, x1:bx1+1, y1:by1+1 };
   }
-  fitPlate();
   layout();          // yeni kesit yeni çerçeve istiyor
 }
 
 /* Boşluk içinde, çevresi de boşluk olan rastgele bir hücre — düşman/powerup
    doğumları duvarın içine düşmesin diye. */
-/* GOAL-017: bilgi levhasının oturacağı en açık nokta.
-   Siklamen sabit merkeze basılıyordu ve dar pasajlı kesitlerde yarısı kemiğin
-   arkasında kalıyordu. Levha bilgi taşıdığı için okunaklı olmak zorunda:
-   birkaç ölçekte tarayıp levha kutusunun en çok boşluğa denk geldiği yeri
-   seçiyoruz, hiçbiri tam sığmazsa en büyük kapsamı veren küçük ölçeğe düşüyoruz. */
-let plateX = GW/2, plateY = GH/2, plateScale = 1;
 /* Boşluğun sınırlayıcı kutusu (ızgara birimi, x1/y1 dışlayıcı) */
 let cavBB = { x0:0, y0:0, x1:GW, y1:GH };
 /* Saha içi yazı/etiketlerin ölçek çarpanı: saha küçüldükçe büyüyorlar ki
@@ -1404,30 +1721,6 @@ let frame = { x0:0, y0:0, x1:GW*CS, y1:GH*CS };
 /* GOAL-031: aynı kadraj EKRAN pikselinde (giriş sahnesi silüeti tahtanın
    üstüne tam oturtmak, bilgi şeridi de tahtanın dışında kalmak için). */
 let scrFrame = { x0:0, y0:0, x1:1, y1:1 }, scrField = { x:0, y:0, s:1 };
-function fitPlate(){
-  // GOAL-022: kutu ızgara genişliğine göre; dar (dikey) ızgarada 74 hücre
-  // boşluğa hiç sığmıyordu.
-  const BW = Math.min(74, Math.round(GW*.46)), BH = Math.round(BW*54/74);
-  let fallback = null;
-  for(const sc of [1, .78, .6, .46]){
-    const bw = BW*sc, bh = BH*sc;
-    let best = null;
-    for(let y=B+bh/2; y<GH-B-bh/2; y+=2) for(let x=B+bw/2; x<GW-B-bw/2; x+=2){
-      let hit = 0, n = 0;
-      for(let sy=-bh/2; sy<=bh/2; sy+=bh/6) for(let sx=-bw/2; sx<=bw/2; sx+=bw/8){
-        const px = Math.round(x+sx), py = Math.round(y+sy);
-        n++; if(cavity[py*GW+px]) hit++;
-      }
-      // kapsam birinci ölçüt; eşitlikte boşluğun ağırlık merkezine yakın olan
-      const score = hit/n - Math.hypot(x-cavCX, y-cavCY)*.0015;
-      if(!best || score > best.score) best = { x:x, y:y, score:score, cover:hit/n, sc:sc };
-    }
-    if(!fallback || best.cover > fallback.cover) fallback = best;
-    if(best.cover >= .92){ plateX = best.x; plateY = best.y; plateScale = sc; return; }
-  }
-  plateX = fallback.x; plateY = fallback.y; plateScale = fallback.sc;
-}
-
 function randomCavityCell(pad){
   pad = pad|0;
   for(let tries=0;tries<500;tries++){
@@ -1466,16 +1759,16 @@ function playerStart(){
 const wallCanvas = makeCanvas(HW,HH), wallCtx = wallCanvas.getContext('2d');
 function paintWalls(L){
   const img = wallCtx.createImageData(HW,HH), d = img.data;
-  const n1 = fbm(HW,HH,34,L.day*331+17,3), n2 = fbm(HW,HH,9,L.day*197+5,2);
+  const n1 = fbmHi(34,L.day*331+17,3), n2 = fbmHi(9,L.day*197+5,2);
   const bone = [hex2rgb('#120b10'), hex2rgb('#2c1a20'), hex2rgb('#4a2f36'), hex2rgb('#785654')];
+  const col = [0,0,0], warm = [206,132,130];
   for(let i=0;i<HW*HH;i++){
     const v = cavSoft[i];
     const a = 1 - sstep(.34,.62,v);
     if(a <= .004) continue;                       // boşluk: tamamen şeffaf
     const edge = sstep(.06,.52,v);                // boşluğa yakın iç yüzey
-    const t = clamp(n1[i]*.52 + n2[i]*.20 + edge*.40, 0, 1);
-    let col = ramp(bone, t);
-    col = mixc(col, [206,132,130], edge*edge*.46);// mukoza altı sıcaklık
+    rampTo(bone, n1[i]*.52 + n2[i]*.20 + edge*.40, col);
+    mixTo(col, warm, edge*edge*.46);              // mukoza altı sıcaklık
     d[i*4] = col[0]; d[i*4+1] = col[1]; d[i*4+2] = col[2];
     d[i*4+3] = Math.min(255, a*255);
   }
@@ -1546,12 +1839,12 @@ document.getElementById('app').insertBefore(view, document.getElementById('vig')
 
 /* GOAL-009: gerçek assetler — PIXI kurulumundan hemen sonra, TEX nesnesinden
    önce yükleniyor ki texFromImage() çağrıldığında görsel hazır olsun. */
-const [playerImg, bossImg, flowerImg, minionFlagellaImg, minionSporeImg] = await Promise.all([
-  loadImage(playerAssetUrl), loadImage(bossAssetUrl), loadImage(flowerAssetUrl),
-  loadImage(minionFlagellaAssetUrl), loadImage(minionSporeAssetUrl)
+const [playerImg, bossImg, boss2Img, boss3Img, flowerImg, minionFlagellaImg, minionSporeImg] = await Promise.all([
+  loadImage(playerAssetUrl), loadImage(bossAssetUrl), loadImage(boss2AssetUrl), loadImage(boss3AssetUrl),
+  loadImage(flowerAssetUrl), loadImage(minionFlagellaAssetUrl), loadImage(minionSporeAssetUrl)
 ]);
 /* GOAL-016: varsa bölüm arka planları (yoksa boş kalır) */
-const bgAssetImgs = {}, plateAssetImgs = {};
+const bgAssetImgs = {}, plateAssetImgs = {}, boardAssetImgs = {};
 async function loadGlob(glob, into){
   await Promise.all(Object.keys(glob).map(async k => {
     const name = k.slice(k.lastIndexOf('/')+1).replace(/\.png$/i,'').toLowerCase();
@@ -1560,8 +1853,13 @@ async function loadGlob(glob, into){
 }
 await loadGlob(BG_GLOB, bgAssetImgs);
 await loadGlob(PLATE_GLOB, plateAssetImgs);
+await loadGlob(BOARD_GLOB, boardAssetImgs);
+for(const k in boardAssetImgs) boardMasks[k] = boardMask(boardAssetImgs[k]);
+applyBoardArtToAnatomy();
 
 const PLAYER_AR = playerImg.height / playerImg.width; // en-boy oranı korunsun diye
+const BOSS_IMGS = [bossImg, boss2Img, boss3Img];
+const BOSS_AR = BOSS_IMGS.map(im => im.height / im.width);
 // GOAL-012: minion assetleri kare olmayabilir; her tür için ayrı en-boy oranı
 const MINI_AR = [minionFlagellaImg.height / minionFlagellaImg.width, minionSporeImg.height / minionSporeImg.width];
 
@@ -1579,7 +1877,36 @@ const bgSprite = new PIXI.Sprite(bgTex);
 bgSprite.width = PFW; bgSprite.height = PFH;
 layerBG.addChild(bgSprite);
 
-/* hastalıklı doku: 480x360 RGBA, alfa ızgaradan bilineer türetiliyor */
+/* İyileşmiş dokunun canlılığı: temizlenen alanda yukarı süzülen hava
+   zerreleri. Hastalıklı doku (dzSprite) ve kemik bu katmanın üstünde olduğu
+   için yalnızca açılan yerde görünüyor — ayrı bir maskeye gerek yok. Nefes
+   anında kısa bir an parlıyor (bkz. render). */
+function texMotes(){
+  const S = 256, cv = makeCanvas(S,S), c = cv.getContext('2d');
+  c.globalCompositeOperation = 'lighter';
+  for(let k=0;k<46;k++){
+    const x = Math.random()*S, y = Math.random()*S, r = .8 + Math.random()*Math.random()*3.6;
+    const g = c.createRadialGradient(x,y,0,x,y,r*2.4);
+    const a = .25 + Math.random()*.5;
+    g.addColorStop(0,'rgba(220,255,250,'+a.toFixed(2)+')'); g.addColorStop(.4,'rgba(150,240,232,'+(a*.45).toFixed(2)+')');
+    g.addColorStop(1,'rgba(150,240,232,0)');
+    for(const ox of [-S,0,S]) for(const oy of [-S,0,S]){ c.save(); c.translate(ox,oy); c.fillStyle = g; c.beginPath(); c.arc(x,y,r*2.4,0,7); c.fill(); c.restore(); }
+  }
+  for(let k=0;k<5;k++){                                    // seyrek, ince hava telleri
+    const x = Math.random()*S, len = 40 + Math.random()*70, y0 = Math.random()*S;
+    const g = c.createLinearGradient(0,y0,0,y0+len);
+    g.addColorStop(0,'rgba(170,250,240,0)'); g.addColorStop(.5,'rgba(170,250,240,.10)'); g.addColorStop(1,'rgba(170,250,240,0)');
+    c.strokeStyle = g; c.lineWidth = 1.2;
+    for(const oy of [-S,0]){ c.beginPath(); c.moveTo(x, y0+oy); c.quadraticCurveTo(x+6, y0+oy+len*.5, x-2, y0+oy+len); c.stroke(); }
+  }
+  return texFromCanvas(cv);
+}
+const healLive = MAJOR >= 8 ? new PIXI.TilingSprite({ texture:texMotes(), width:PFW, height:PFH })
+                            : new PIXI.TilingSprite(texMotes(), PFW, PFH);
+healLive.blendMode = BLEND_ADD; healLive.alpha = .4;
+layerBG.addChild(healLive);
+
+/* hastalıklı doku: HW x HH RGBA (hücre başına SC piksel), alfa ızgaradan bilineer türetiliyor */
 const dzCanvas = makeCanvas(HW,HH), dzCtx = dzCanvas.getContext('2d');
 const dzImg = dzCtx.createImageData(HW,HH);
 const dzTex = texFromCanvas(dzCanvas);
@@ -1601,10 +1928,17 @@ const rimImg = rimCtx.createImageData(HW,HH);
 const rimTex = texFromCanvas(rimCanvas);
 const rimCore = new PIXI.Sprite(rimTex);
 rimCore.width = PFW; rimCore.height = PFH; rimCore.blendMode = BLEND_ADD; rimCore.alpha = .95;
+/* Işıma: aynı bandın bulanık kopyası. Eskiden %1,2 büyütülmüş bir kopyaydı;
+   merkezden uzak kenarlarda ışıma yana kayıyor, kesim kenarları çift çizgi
+   gibi görünüyordu. Bulanıklık her yöne eşit. */
 const rimBloom = new PIXI.Sprite(rimTex);
-rimBloom.anchor.set(.5); rimBloom.x = PFW/2; rimBloom.y = PFH/2;
-rimBloom.width = PFW*1.012; rimBloom.height = PFH*1.016;
-rimBloom.blendMode = BLEND_ADD; rimBloom.alpha = .32;
+rimBloom.width = PFW; rimBloom.height = PFH;
+rimBloom.blendMode = BLEND_ADD; rimBloom.alpha = .5;
+try{
+  const bf = MAJOR >= 8 ? new PIXI.BlurFilter({ strength:5, quality:2 }) : new PIXI.BlurFilter(5, 2);
+  bf.blendMode = BLEND_ADD;              // filtre varken karışımı filtre belirliyor
+  rimBloom.filters = [bf];
+}catch(e){ rimBloom.alpha = 0; }
 layerRim.addChild(rimBloom, rimCore);
 
 /* alfa + kenar bandını tek geçişte hesapla (yalnızca değişen bölge) */
@@ -1672,7 +2006,7 @@ const TEX = {
   glow:   texRadial(256, [[0,'rgba(255,255,255,1)'],[.28,'rgba(255,255,255,.45)'],[1,'rgba(255,255,255,0)']]),
   spark:  texRadial(64,  [[0,'rgba(255,255,255,1)'],[.4,'rgba(255,255,255,.6)'],[1,'rgba(255,255,255,0)']]),
   player: texFromImage(playerImg),
-  boss:   texFromImage(bossImg),
+  boss:   BOSS_IMGS.map(texFromImage),   // evre sırasıyla (bkz. BOSS_TIER_BY_DAY)
   mini:   [texFromImage(minionFlagellaImg), texFromImage(minionSporeImg)],
   pu:     PU_META.map(texPowerup),
   wind:   texWind(),
@@ -1724,17 +2058,59 @@ playerGlow.blendMode = BLEND_ADD; playerGlow.tint = 0xff87c0; playerGlow.alpha =
 const playerSprite = new PIXI.Sprite(TEX.player);
 playerSprite.anchor.set(.5);
 playerSprite.width = 34; playerSprite.height = 34 * PLAYER_AR; // GOAL-009: gerçek PNG en-boy oranı + okunabilirlik için hafif büyütme (30->34)
-layerEnt.addChild(playerGlow, playerSprite);
+/* İlaç kalkanı, oyuncunun üstünde: siklamenin çevresinde kalan dozu gösteren
+   halka. Panelde ayrı bir çubuk olarak dururken ne işe yaradığı
+   anlaşılmıyordu; halka bilgiyi oyuncunun baktığı yerde veriyor. Dolu halka =
+   kenarda korunuyorsun. Çizerken koruma yok, halka sönükleşiyor; doz bitince
+   halka kesik kesik kırmızıya dönüyor (kenarda da savunmasızsın). */
+const shieldG = new PIXI.Graphics();
+layerEnt.addChild(playerGlow, shieldG, playerSprite);
+function strokeArc(g, cx, cy, r, a0, a1, width, color, alpha){
+  const style = { width, color, alpha, cap:'round' };
+  g.moveTo(cx + Math.cos(a0)*r, cy + Math.sin(a0)*r);
+  if(MAJOR >= 8){ g.arc(cx, cy, r, a0, a1); g.stroke(style); }
+  else { g.lineStyle(Object.assign({}, style, { cap:PIXI.LINE_CAP ? PIXI.LINE_CAP.ROUND : 'round' })); g.arc(cx, cy, r, a0, a1); }
+}
+function drawShield(x, y, t){
+  const g = shieldG; g.clear();
+  if(G.state !== 'play' && G.state !== 'paused'){ return; }
+  const dr = clamp(G.dose/Math.max(1, G.doseMax), 0, 1), R = 24, top = -Math.PI/2;
+  if(dr <= 0){                                 // kırık halka
+    const a = .45 + .35*Math.sin(t*7);
+    for(let k=0;k<6;k++){ const a0 = top + k/6*Math.PI*2 + .18; strokeArc(g, x, y, R, a0, a0 + .55, 2.6, 0xff4d6d, a); }
+    return;
+  }
+  const dim = G.drawing ? .38 : 1;             // çizerken kalkan korumuyor
+  const col = dr <= .15 ? 0xff4d6d : dr < .30 ? 0xff9a3c : 0xffc24a;
+  const pulse = dr <= .15 ? .55 + .45*Math.sin(t*10) : 1;
+  strokeArc(g, x, y, R, 0, Math.PI*2, 2.4, 0xffffff, .10*dim);          // iz
+  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 3, col, .95*dim*pulse);
+  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 7, col, .18*dim*pulse);  // hafif ışıma
+}
 
 function pool(container, make, n){
   const a = [];
   for(let i=0;i<n;i++){ const s = make(); s.visible = false; container.addChild(s); a.push(s); }
   return a;
 }
-const trailCore = pool(layerTrail, ()=>{ const s = new PIXI.Sprite(PIXI.Texture.WHITE);
-  s.anchor.set(.5); s.tint = 0xdafffb; return s; }, 300);
-const trailGlow = pool(layerTrail, ()=>{ const s = new PIXI.Sprite(PIXI.Texture.WHITE);
-  s.anchor.set(.5); s.tint = 0x35e0d8; s.alpha = .3; s.blendMode = BLEND_ADD; return s; }, 300);
+/* Kesim çizgisi: tek parça vektör çizgi (yuvarlak köşe ve uç) + aynı
+   çizgiden iki kat ışıma. Eskiden her düz parça ayrı bir dikdörtgendi;
+   köşelerde boşluk kalıyor, ışıma çekirdekle kayık duruyordu. */
+const trailGlowG = new PIXI.Graphics(), trailCoreG = new PIXI.Graphics();
+trailGlowG.blendMode = BLEND_ADD;
+layerTrail.addChild(trailGlowG, trailCoreG);
+function strokePath(g, pts, width, color, alpha){
+  if(pts.length < 2) return;
+  const style = { width, color, alpha, join:'round', cap:'round' };
+  if(MAJOR >= 8){
+    g.moveTo(pts[0][0], pts[0][1]); for(let i=1;i<pts.length;i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.stroke(style);
+  } else {
+    g.lineStyle(Object.assign({}, style, { join:PIXI.LINE_JOIN ? PIXI.LINE_JOIN.ROUND : 'round',
+                                           cap:PIXI.LINE_CAP ? PIXI.LINE_CAP.ROUND : 'round' }));
+    g.moveTo(pts[0][0], pts[0][1]); for(let i=1;i<pts.length;i++) g.lineTo(pts[i][0], pts[i][1]);
+  }
+}
 const particles = [];
 const partSprites = pool(layerEnt, ()=>{ const s = new PIXI.Sprite(TEX.spark);
   s.anchor.set(.5); s.blendMode = BLEND_ADD; return s; }, 300);
@@ -1941,18 +2317,17 @@ const OPP  = {1:2,2:1,3:4,4:3};
    ========================================================================= */
 const $ = id => document.getElementById(id);
 const UI = {
-  day:$('day').querySelector('.num'), name:$('stageName'),
+  dayTxt:$('dayTxt'), dayDots:$('dayDots'), name:$('stageName'),
   fill:$('gaugeFill'), goal:$('gaugeGoal'), pct:$('pctRead'),
-  score:$('scoreVal'), dose:$('doseFill'), lives:$('lives'), buffs:$('buffs'),
+  score:$('scoreVal'), lives:$('lives'), buffs:$('buffs'),
   toast:$('toast'), toastT:$('toast').querySelector('.t'), toastS:$('toast').querySelector('.s'),
   overlay:$('overlay'), plate:$('plate'), fps:$('fps'),
   menuScreen:$('menuScreen'), menuContent:$('menuContent'),
   // GOAL-015
-  press:$('pressFill'), pressWrap:$('pressWrap'),
   airway:$('airway'), airPct:$('airPct'), breathBar:$('breathBar'),
   airFill:$('airFill'), airMark:$('airMark'),
   // GOAL-021: her göstergenin yanında artık sayısal değer de var
-  doseVal:$('doseVal'), pressVal:$('pressVal'), breathVal:$('breathVal'),
+  breathVal:$('breathVal'),
   veil:$('pressVeil'), flowVeil:$('flowVeil'),   // GOAL-027
   hint:$('touchHint'),         // GOAL-022: dokunmatik kontrol ipucu
   hudInner:$('hudInner')       // GOAL-023: eni tahtanın enine bağlanıyor
@@ -1979,9 +2354,14 @@ function toast(main, sub){
   toastTimer = setTimeout(()=> UI.toast.classList.remove('on'), 1500);
 }
 let doseAlertState = 'ok'; // GOAL-013 (madde 7): eşik geçişlerinde tek seferlik uyarı için
+/* HUD (yeniden düzen): önem sırası hedef → can → nefes. Gün ve skor küçük.
+   Doz kalkanı panelde değil, oyuncunun üstünde halka (bkz. drawShield);
+   basınç sürekli bir çubuk değil, yalnızca yükselirken uyarı olarak çıkıyor. */
 function syncHUD(){
   const L = G.level;
-  UI.day.textContent = String(L.day).padStart(2,'0');
+  UI.dayTxt.textContent = 'Gün ' + L.day + ' / ' + LEVELS.length;
+  if(UI.dayDots.childElementCount !== LEVELS.length) UI.dayDots.innerHTML = LEVELS.map(() => '<i></i>').join('');
+  UI.dayDots.querySelectorAll('i').forEach((d, k) => { d.className = k < L.day-1 ? 'done' : k === L.day-1 ? 'now' : ''; });
   // GOAL-024: HUD basligi artik gunun temasi degil BOLGE — oyun sirasinda
   // asil gereken bilgi nerede oldugumuz; gunun adi brifingde ve haritada zaten
   // duruyor. Genis ekranda ikisi birden siga.
@@ -1992,59 +2372,48 @@ function syncHUD(){
   // GOAL-027: hedef artık tek koşul. Hava yolu bir kapı değil, çarpan.
   const met = G.pct >= L.target;
   UI.pct.className = met ? 'met' : '';
-  // GOAL-021: hedef ve uyarı artık serbest metin değil, ayrı okunur rozetler
-  UI.pct.innerHTML = '<b>%'+Math.floor(G.pct*100)+'</b> temizlendi'
-    + '<span class="tag">hedef %'+Math.round(L.target*100)+'</span>';
+  UI.pct.innerHTML = '<span class="lbl">HEDEF</span><b>%'+Math.floor(G.pct*100)+'</b>'
+    + '<span class="of">/ %'+Math.round(L.target*100)+'</span>' + (met ? '<span class="done">TAMAM</span>' : '');
   UI.score.textContent = G.score.toLocaleString('tr-TR');
+  // GOAL-013 (madde 7): kalkan eşik geçişlerinde tek seferlik uyarı — artık
+  // ne yapılacağını da söylüyor. Mekanik değişmedi.
   const dr = clamp(G.dose/G.doseMax,0,1);
-  UI.dose.style.width = (dr*100)+'%';
-  UI.doseVal.textContent = '%'+Math.round(dr*100);
-  UI.dose.style.background = dr < .25
-    ? 'linear-gradient(90deg,#7a1620,#ff4d6d)'
-    : 'linear-gradient(90deg,#7a5a12,#ffc24a)';
-  UI.dose.style.boxShadow = dr < .25 ? '0 0 12px rgba(255,77,109,.7)' : '0 0 10px rgba(255,194,74,.5)';
-  // GOAL-013 (madde 7): doz kalkanını "rastgele bir çubuk" olmaktan çıkarıp
-  // eşik geçişlerinde fark edilir uyarı vermek — mevcut doz mekaniği değişmedi.
-  const doseWrapEl = document.getElementById('doseWrap');
   const newDoseState = dr <= .15 ? 'critical' : dr < .30 ? 'warn' : 'ok';
-  if(doseWrapEl){
-    doseWrapEl.classList.toggle('critical', newDoseState === 'critical');
-    doseWrapEl.classList.toggle('warn', newDoseState === 'warn');
-  }
   if(G.state === 'play' && newDoseState !== doseAlertState){
-    if(newDoseState === 'critical') toast('KALKAN KRİTİK', 'Doz bitmek üzere!');
-    else if(newDoseState === 'warn') toast('Kalkan zayıflıyor', 'Doz %30 altında');
+    if(newDoseState === 'critical') toast('KALKAN BİTİYOR', 'Kes: kapattığın alan kalkanı doldurur');
+    else if(newDoseState === 'warn') toast('Kalkan zayıflıyor', 'Kenarda bekleme, kes');
   }
   doseAlertState = newDoseState;
   let lv = '';
   for(let i=0;i<3;i++) lv += '<img class="heart'+(i<G.lives?'':' off')+'" src="'+healthAssetUrl+'" alt="can">';
   UI.lives.innerHTML = lv;
+
+  // koşullu uyarılar: basınç (yükselirken), kalkan bitti, güçlendiriciler
+  const pr = clamp(G.pressure,0,1);
+  Sound.tension(pr);   // GOAL-020: basınç arttıkça müzik hafifçe parlıyor
   let bf = '';
+  if(pr >= .08) bf += '<div class="buff press'+(pr >= .6 ? ' high' : '')+'"><b>⚠ BASINÇ %'+Math.round(pr*100)+' · nefes tıkalı</b>'
+    + '<span>Düşmanlar hızlanıyor. Dipten tepeye yol aç.</span><em><u style="width:'+(pr*100).toFixed(0)+'%"></u></em></div>';
+  if(G.dose <= 0) bf += '<div class="buff warn">Kalkan bitti · kes</div>';
   for(const k in G.buffs){
     const m = PU_META.find(p=>p.key===k);
     bf += '<div class="buff">'+m.letter+' '+Math.ceil(G.buffs[k])+'s</div>';
   }
-  if(G.dose <= 0) bf += '<div class="buff warn">Kalkan düştü</div>';
-  if(G.pressure >= .7) bf += '<div class="buff warn">Basınç kritik</div>';
-  UI.buffs.innerHTML = bf;
+  if(UI.buffs.innerHTML !== bf) UI.buffs.innerHTML = bf;
 
-  // GOAL-015: basınç çubuğu + hava yolu rozeti + nefes geri sayımı
-  const pr = clamp(G.pressure,0,1);
-  Sound.tension(pr);   // GOAL-020: basınç arttıkça müzik hafifçe parlıyor
-  UI.press.style.width = (pr*100).toFixed(1)+'%';
-  UI.pressVal.textContent = '%'+Math.round(pr*100);
-  UI.pressWrap.classList.toggle('high', pr >= .6);
+  // GOAL-015: nefes geri sayımı + havanın ulaştığı yol, tek modül
   const ar = clamp(breath.reach,0,1), full = breath.top;
   UI.airFill.style.width = (ar*100).toFixed(1)+'%';
   UI.airMark.style.left  = (ar*100).toFixed(1)+'%';
   // GOAL-027: yüzdenin yanında o anki kazanç — "bunu neden istiyorum" sorusunun cevabı
-  // Yüzde havalanan doku oranı; yeşile dönmesi nefesin tepeye ulaştığını söylüyor
-  UI.airPct.innerHTML = '%'+Math.round(ar*100)
-    + '<i>×' + flowMult().toFixed(2) + '</i>';
+  const pa = Math.round(ar*100);
+  UI.airPct.innerHTML = full ? '<b>Yol açık</b> · puan <i>×' + flowMult().toFixed(2) + '</i>'
+    : pa < 1 ? '<b>Yol tıkalı</b> · dipten yukarı kes'
+    : 'Yolun <b>%' + pa + "'" + pctPoss(pa) + '</b> açık · puan <i>×' + flowMult().toFixed(2) + '</i>';
   UI.airway.classList.toggle('open', full);
   UI.airway.classList.toggle('partial', !full && ar >= .5);
   UI.breathBar.style.width = (clamp(G.breathT/Math.max(1,G.level.breath),0,1)*100).toFixed(1)+'%';
-  UI.breathVal.textContent = Math.max(0,Math.ceil(G.breathT))+'s';
+  UI.breathVal.textContent = Math.max(0,Math.ceil(G.breathT))+' sn';
 }
 function showPanel(html){ UI.hint.classList.remove('on'); UI.plate.innerHTML = html; UI.overlay.classList.add('on');
   const b = UI.plate.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus(), 30); }
@@ -2184,6 +2553,7 @@ function showGameOverNameEntry(){
 }
 function showMainMenu(){
   G.state = 'title';
+  ClearReveal.cancel();
   Sound.scene('menu');   // GOAL-020
   /* GOAL-026: ana menü yeniden tasarlandı (biçim tarafı için index.html'deki
      GOAL-026 bloğu). Eski hâli iki satır yazı ve dört düz düğmeydi; oyunun
@@ -2414,7 +2784,8 @@ function readInput(){
    ========================================================================= */
 function spawnBoss(L, idx){
   const a = idx*Math.PI + rnd(0,1);
-  const s = new PIXI.Sprite(TEX.boss); s.anchor.set(.5);
+  const tier = L.bossTier|0;
+  const s = new PIXI.Sprite(TEX.boss[tier]); s.anchor.set(.5);
   const g = new PIXI.Sprite(TEX.glow);
   g.anchor.set(.5); g.blendMode = BLEND_ADD; g.tint = 0xff5a2c; g.alpha = .4;
   layerEnt.addChild(g, s);
@@ -2422,7 +2793,7 @@ function spawnBoss(L, idx){
   const c0 = randomCavityCell(Math.ceil(L.bossR*.7));
   return { x:c0.x, y:c0.y,
            vx:Math.cos(a+1)*L.bossSpd, vy:Math.sin(a+1)*L.bossSpd,
-           r:L.bossR, spd:L.bossSpd, t:rnd(0,6), fireT:rnd(1,3), s:s, g:g };
+           r:L.bossR, spd:L.bossSpd, t:rnd(0,6), fireT:rnd(1,3), s:s, g:g, ar:BOSS_AR[tier] };
 }
 function spawnMinion(L){
   const a = rnd(0,7), d = rnd(GH*.12, GH*.4), kind = Math.random()<.55?0:1;
@@ -2456,6 +2827,7 @@ function startLevel(){
   const L = LEVELS[G.levelIdx];
   G.level = L;
   // GOAL-015: ızgara artık kesite bağlı olduğu için prepareLevel resetGrid'den ÖNCE
+  ClearReveal.cancel(); ClearReveal.tok++;
   clearEntities(); prepareLevel(G.levelIdx); resetGrid();
   rasterRegion(0,0,GW,GH);
   G.filled=0; G.pct=0; G.drawing=false; G.trail=[]; G.corners=[];
@@ -2518,6 +2890,28 @@ function startLevel(){
    [etiketin yüksekliği, sağ taraftaki çapa noktası] (yüz birimi) */
 const FACE_LABEL = { frontal:[IMG([0,172])[1], IMG([190,170])], ethmoid:[IMG([0,212])[1], IMG([186,214])],
                      nasal:[IMG([0,244])[1], IMG([181,246])], maxillary:[IMG([0,268])[1], IMG([212,258])] };
+/* Biçimi harita görselinden gelen sinüste çapa, sağ taraftaki yeni biçimin
+   içinde: ağırlık merkezinden sağa, hâlâ boşluğun içinde kalan en uzak nokta. */
+for(const rg in FACE_LABEL) if(boardMasks[rg + '_sag'] && boardMasks[rg + '_sag'].win){
+  const P = ANAT[rg].sag, m = polyAreaCentroid(P);
+  const inside = (x, y) => { let k = false;
+    for(let i=0, j=P.length-1; i<P.length; j=i++)
+      if((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0]-P[i][0])*(y-P[i][1])/(P[j][1]-P[i][1]) + P[i][0]) k = !k;
+    return k; };
+  let ax = m.cx;
+  for(let t=0; t<1; t+=.02){ const x = m.cx + t*.3; if(inside(x, m.cy)) ax = x; else break; }
+  FACE_LABEL[rg][1] = [m.cx + (ax - m.cx)*.6, m.cy];
+}
+/* "alanın %66'sını": yüzdenin okunuşunun son kelimesine göre iyelik + belirtme
+   eki (altı → sını, yetmiş → ini, seksen → ini, yüz → ünü) */
+function pctAcc(n){
+  const U = ['','ini','sini','ünü','ünü','ini','sını','sini','ini','unu'];
+  const T = ['','unu','sini','unu','ını','sini','ını','ini','ini','ını'];
+  n = Math.round(n);
+  return n % 10 ? U[n % 10] : (n % 100 ? T[(n/10|0) % 10] : 'ünü');
+}
+/* "yolun %6'sı": iyelik eki (belirtme ekinin son hecesi düşmüş hâli; 0 = sıfır → ı) */
+function pctPoss(n){ return Math.round(n) === 0 ? 'ı' : pctAcc(n).slice(0, -2); }
 const rgbaA = (c, a) => 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')';
 const sideSign = i => DAY_SIDE[i] === 'sag' ? 1 : -1;
 const faceShape = (region, sg) => ANAT[region][sideKey(sg)];
@@ -2661,18 +3055,36 @@ const Cine = {
     const step = () => { if(!this.active) return; this.frame(); if(!this.ended) this.raf = requestAnimationFrame(step); };
     this.raf = requestAnimationFrame(step);
   },
-  /* Künye kartı: bölge, günün teması, günün bilgi görseli ve kısa kural. */
+  /* Künye kartı. Sıra okunma önceliği: önce ne yapılacak (hedef, büyük),
+     sonra bugün ne değişti, sonra günün üç oyuncusu ikonla (nefes, bakteri,
+     mikrop), en son bölge bilgisi ve günün bilgi görseli. Her gün aynı olan
+     uzun kural paragrafı ikon satırına indi; değişen tek şey öne çıkıyor. */
   buildCard(L){
     const thumb = plateThumbURL(L), cap = PLATE_CAPS[L.theme] || '';
+    const i = L.day-1, P = LEVELS[i-1], pct = Math.round(L.target*100);
+    const TIER = ['Küçük hâli', 'Büyüdü', 'En büyük, en hızlı'];
+    const BOSS_URL = [bossAssetUrl, boss2AssetUrl, boss3AssetUrl];
+    const news = [];
+    if(P && P.region !== L.region) news.push({ t:'Yeni bölge: ' + L.regionName });
+    if(P && P.bossTier !== L.bossTier) news.push({ t:L.bossTier === 2 ? 'Bakteri en büyük ve en hızlı hâlinde' : 'Bakteri büyüdü',
+                                                   img:BOSS_URL[L.bossTier] });
+    if(P && P.region === L.region && P.side !== L.side) news.push({ t:'Aynı bölgenin ' + L.sideName.toLocaleLowerCase('tr-TR') + ' tarafı' });
+    const newsHtml = news.length ? `<div class="ccNew"><span>BUGÜN YENİ</span>${news.map(n =>
+        `<p>${n.img ? `<img src="${n.img}" alt="">` : ''}${escapeHtml(n.t)}</p>`).join('')}</div>` : '';
     this.card.innerHTML =
       `<div class="ccMain">
-         <div class="ccK">GÜN ${String(L.day).padStart(2,'0')} &nbsp;·&nbsp; ${L.sideName} TARAF &nbsp;·&nbsp; HEDEF %${Math.round(L.target*100)}</div>
+         <div class="ccK">GÜN ${String(L.day).padStart(2,'0')} &nbsp;·&nbsp; ${L.sideName} TARAF</div>
          <div class="ccT">${escapeHtml(L.regionName)}</div>
          <div class="ccS">${escapeHtml(L.name)}</div>
+         <div class="ccGoal"><span>HEDEF</span><b>Alanın <em>%${pct}</em>'${pctAcc(pct)} temizle</b></div>
+         ${newsHtml}
+         <div class="ccIcons">
+           <div><span class="ccIc howBreath"></span><b>Nefes · ${L.breath.toFixed(0)} sn</b><i>Dipten tepeye aç: puan ×1,8</i></div>
+           <div><img class="ccIc" src="${BOSS_URL[L.bossTier|0]}" alt=""><b>Bakteri</b><i>${TIER[L.bossTier|0]}</i></div>
+           <div><span class="ccIc ccPair"><img src="${minionFlagellaAssetUrl}" alt=""><img src="${minionSporeAssetUrl}" alt=""></span>
+             <b>Mikrop · ${L.mini}</b><i>Çizgini keser</i></div>
+         </div>
          <p class="ccA">${escapeHtml(L.regionAbout)}</p>
-         <p class="ccR"><b>Hedef:</b> alanın %${Math.round(L.target*100)}'ini temizle.
-            <b>Nefes</b> her ${L.breath.toFixed(0)} saniyede dipten girer, yalnızca açtığın yerden
-            yayılır: dipten tepeye kopuksuz aç, puan 1,8 katına çıksın.</p>
        </div>
        <div class="ccSide">
          ${thumb ? `<div class="plateShot"><img src="${thumb}" alt=""><div><b>${cap}</b><p>${L.med}</p></div></div>` : ''}
@@ -2720,14 +3132,22 @@ const Cine = {
      (OMC), frontal için etmoidin yanından yukarı. Eğri örneklenip uzunluğu
      ölçülüyor (ilerleyen uç için). */
   buildPath(){
-    const region = DAY_REGION[this.idx], sg = sideSign(this.idx);
-    const via = { nasal:['nasal'], maxillary:['nasal','maxillary'], ethmoid:['nasal','ethmoid'],
-                  frontal:['nasal','ethmoid','frontal'] }[region];
-    const pin = rg => { const b = faceBBox(rg, sg); return [(b.x0+b.x1)/2, (b.y0+b.y1)/2]; };
-    const pts = [IMG([sg < 0 ? 156 : 181, 272])].concat(via.map(pin));   // o tarafın burun deliği
-    const out = [], P = i => pts[Math.max(0, Math.min(pts.length-1, i))];
+    const region = DAY_REGION[this.idx], sg = sideSign(this.idx), sd = sideKey(sg), D = DRAIN[sd];
+    const ctr = rg => { const c = polyAreaCentroid(ANAT[rg][sd]); return [c.cx, c.cy]; };
+    const P = q => IMG(q);
+    // burun deliği → septum boyunca ortak meatus (konkaların iç ucu ile septum arası)
+    const base = [P(D.nostril), P(D.low), P(D.under)];
+    let pts;
+    if(region === 'nasal') pts = [P(D.nostril), P(D.low), ctr('nasal')];
+    else if(region === 'maxillary')       // orta konkanın altından orta meatusa, infundibulumdan ostiuma
+      pts = base.concat([P(D.tuck), P(D.meatusLo)], D.maxDuct.slice().reverse(), [ctr('maxillary')]);
+    else if(region === 'ethmoid')         // kolonla yukarı, hücre ağzından içeri
+      pts = base.concat([P([D.under[0], 234]), P(D.ethDuct), ctr('ethmoid')]);
+    else                                   // OMC'den frontal resessle yukarı
+      pts = base.concat([P([D.under[0], 234])], D.frDuct.slice().reverse(), [ctr('frontal')]);
+    const out = [], Q = i => pts[Math.max(0, Math.min(pts.length-1, i))];
     for(let i=0;i<pts.length-1;i++){
-      const p0 = P(i-1), p1 = P(i), p2 = P(i+1), p3 = P(i+2);
+      const p0 = Q(i-1), p1 = Q(i), p2 = Q(i+1), p3 = Q(i+2);
       for(let k=0;k<16;k++){
         const t = k/16, t2 = t*t, t3 = t2*t;
         out.push([0,1].map(j => .5*((2*p1[j]) + (-p0[j]+p2[j])*t + (2*p0[j]-5*p1[j]+4*p2[j]-p3[j])*t2
@@ -2767,7 +3187,8 @@ const Cine = {
     const L = this.L, idx = this.idx, B0 = BOARDS[L.region];
     const tSides = B0.both ? ['sol','sag'] : [L.side];
     const dayOf = (rg, sd) => { for(let i=0;i<LEVELS.length;i++) if(DAY_REGION[i] === rg && DAY_SIDE[i] === sd) return i; return -1; };
-    const inBoard = (rg, sd) => tSides.includes(sd) && B0.parts.includes(rg);
+    const parts = boardParts(L), art = boardArt(L);
+    const inBoard = (rg, sd) => tSides.includes(sd) && parts.includes(rg);
     const style = (rg, sd) => {
       const col = ANAT_COL[rg], d = dayOf(rg, sd), now = rg === L.region && tSides.includes(sd);
       const a = inBoard(rg, sd) ? nowA : allA;
@@ -2805,10 +3226,10 @@ const Cine = {
       c.beginPath(); splinePath(c, w[2], false); c.stroke();
       c.restore();
     }
-    // bugünün hastalık ayrıntıları
+    // bugünün hastalık ayrıntıları (harita görselli tahtada yoklar, haritada da yok)
     c.globalAlpha = nowA;
     c.fillStyle = 'rgba(48,26,34,.62)'; c.strokeStyle = 'rgba(48,26,34,.62)';
-    for(const d of anatDisease(L.region, L.side, L.detail|0)){
+    if(!art) for(const d of anatDisease(L.region, L.side, L.detail|0)){
       if(d.pts) blob(c, d.pts);
       else { c.lineWidth = d.w; c.beginPath(); splinePath(c, d.line, false); c.stroke(); }
     }
@@ -3023,21 +3444,59 @@ addEventListener('keydown', e => {
    alan oyuncu bilgileri art arda kaçırmasın, sırayla görsün.
    ========================================================================= */
 const Info = {
-  el:$('infoRail'), kick:$('irKick'), idxEl:$('irIdx'), body:$('irBody'),
-  facts:[], shown:-1, want:-1, lastT:-99, vis:false, swapT:0,
+  el:$('infoRail'), kick:$('irKick'), idxEl:$('irIdx'), body:$('irBody'), icon:$('irIcon'), pop:$('irPop'),
+  facts:[], shown:-1, want:-1, lastT:-99, vis:false, swapT:0, arriveT:0, from:null,
   MIN_DWELL:7,
   reset(L){
     this.facts = FACTS[L.day-1] || [];
-    this.shown = -1; this.want = -1; this.lastT = -99;
-    this.kick.textContent = 'BİLGİ · ' + L.regionName.toLocaleUpperCase('tr-TR');
+    this.shown = -1; this.want = -1; this.lastT = -99; this.from = null;
+    // "BİLGİ" etiketini süzülen işaret ve renk taşıyor; dar şeritte bölge adı kesilmesin
+    this.kick.textContent = L.regionName.toLocaleUpperCase('tr-TR');
+    // bölgenin haritadaki rengi ve silüeti: şerit neyle ilgili, bir bakışta
+    const rc = ANAT_COL[L.region].join(',');
+    this.el.style.setProperty('--rc', rc); this.pop.style.setProperty('--rc', rc);
+    this.drawIcon(L);
+    this.idxEl.innerHTML = this.facts.map(() => '<i></i>').join('');
     this.setVis(false);
   },
+  drawIcon(L){
+    const c = this.icon.getContext('2d'), S = this.icon.width, P = ANAT[L.region][L.side];
+    let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
+    for(const p of P){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    const k = (S - 8) / Math.max(x1-x0, y1-y0);
+    c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,S,S);
+    c.setTransform(k,0,0,k, S/2 - k*(x0+x1)/2, S/2 - k*(y0+y1)/2);
+    c.beginPath(); splinePath(c, P, true);
+    c.fillStyle = rgbaA(ANAT_COL[L.region], .9); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 2.5/k; c.stroke();
+  },
   /* Her kapanıştan sonra: ilk kesim ilk bilgiyi, sonra hedefin her çeyreği
-     bir sonrakini açıyor. */
-  onCapture(){
+     bir sonrakini açıyor. (gx, gy): kapanan parçanın ortası — "+ BİLGİ"
+     işareti oradan şeride süzülüyor. */
+  onCapture(gx, gy){
     const n = this.facts.length; if(!n) return;
+    if(gx !== undefined) this.from = [gx, gy];
     const prog = clamp(G.pct / Math.max(.01, G.level.target), 0, 1);
     this.want = Math.max(this.want, Math.min(n-1, Math.floor(prog*n)));
+  },
+  /* Yeni bilginin gelişi: kesimin yerinden şeride kısa bir süzülme ve
+     şeridin kenarında tek, yumuşak bir ışıma. Hareket azaltma tercihinde
+     yalnızca ışıma. */
+  announce(){
+    clearTimeout(this.arriveT);
+    this.el.classList.add('arrive');
+    this.arriveT = setTimeout(() => this.el.classList.remove('arrive'), 1500);
+    if(!this.from || this.el.classList.contains('gone') || !this.pop.animate) return;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const a = Guide.toScreen(this.from[0] + .5, this.from[1] + .5), r = this.el.getBoundingClientRect();
+    const pw = this.pop.offsetWidth || 80, ph = this.pop.offsetHeight || 28;
+    const b = [r.left + Math.min(40, r.width/2), r.top + 10];
+    this.pop.animate([
+      { transform:`translate(${a[0]-pw/2}px,${a[1]-ph/2}px) scale(.85)`, opacity:0 },
+      { transform:`translate(${a[0]-pw/2}px,${a[1]-ph/2-18}px) scale(1)`, opacity:1, offset:.22 },
+      { transform:`translate(${a[0]-pw/2}px,${a[1]-ph/2-18}px) scale(1)`, opacity:1, offset:.42 },
+      { transform:`translate(${b[0]-pw/2}px,${b[1]-ph/2}px) scale(.7)`, opacity:0 }
+    ], { duration:1500, easing:'cubic-bezier(.45,0,.25,1)' });
   },
   tick(){
     if(this.want > this.shown && G.time - this.lastT >= (this.shown < 0 ? 0 : this.MIN_DWELL)) this.show(this.shown+1);
@@ -3049,12 +3508,22 @@ const Info = {
     const fill = () => {
       this.body.querySelector('b').textContent = f.t;
       this.body.querySelector('p').textContent = f.b;
-      this.idxEl.textContent = (i+1) + '/' + this.facts.length;
+      this.idxEl.querySelectorAll('i').forEach((d, k) => d.classList.toggle('on', k <= i));
       this.body.classList.remove('swap');
+      this.fit();
     };
     clearTimeout(this.swapT);
-    if(i === 0 || !this.vis) fill();
-    else { this.body.classList.add('swap'); this.swapT = setTimeout(fill, 460); }
+    if(i === 0 || !this.vis){ fill(); requestAnimationFrame(() => this.announce()); }
+    else { this.body.classList.add('swap'); this.swapT = setTimeout(fill, 460); this.announce(); }
+  },
+  /* Şerit kendisine ayrılan yüksekliğe (avail, bkz. placeInfoRail) sığmıyorsa
+     gövde iki satıra kırpılıyor; tamamı gün sonunda okunuyor. */
+  avail:0, autoCompact:false,
+  fit(){
+    if(this.autoCompact){ this.el.classList.remove('compact'); this.autoCompact = false; }
+    if(this.avail > 0 && !this.el.classList.contains('compact') && this.el.offsetHeight > this.avail){
+      this.el.classList.add('compact'); this.autoCompact = true;
+    }
   },
   setVis(v){
     if(v === this.vis) return;
@@ -3095,7 +3564,7 @@ const Guide = {
     return el;
   },
   STEPS:[
-    'Bu sensin: siklamen özlü ilaç. Kenar çizgisinin üstünde güvendesin.',
+    'Bu sensin: siklamen özlü ilaç. Çevrendeki altın halka dolu oldukça kenar çizgisinde güvendesin.',
     'Dokuya gir, bir parça çiz ve kenara geri dön — kapattığın alan temizlenir.',
     'Harika! Çizerken mikroplar çizgine değerse can kaybedersin. Hedefe ulaşınca gün biter.'
   ],
@@ -3150,11 +3619,12 @@ function showHowTo(){
     `<div class="menuBrand"><div class="kicker">NASIL OYNANIR</div><div class="title">Kim kimdir?</div></div>
      <div class="howList">
        <div class="howRow"><img src="${playerAssetUrl}" alt=""><div><b>Sen: siklamen özlü ilaç</b>
-         <p>Kenar çizgisinin üstünde güvendesin. ${isTouch ? 'Parmağını sürükleyerek' : 'Ok tuşları ya da WASD ile'} yönlendir.</p></div></div>
+         <p>Kenar çizgisinin üstünde güvendesin — çevrendeki altın halka (ilaç kalkanı) dolu oldukça. Halka zamanla azalır, kestikçe dolar; bitince kenarda da vurulursun. ${isTouch ? 'Parmağını sürükleyerek' : 'Ok tuşları ya da WASD ile'} yönlendir.</p></div></div>
        <div class="howRow"><span class="howCut"></span><div><b>Kes ve kapat</b>
          <p>Dokuya gir, bir parça çiz ve kenara geri dön. Kapattığın alan temizlenir; hedef yüzdeye ulaşınca gün biter.</p></div></div>
-       <div class="howRow"><img src="${bossAssetUrl}" alt=""><div><b>Bakteri</b>
-         <p>Büyük düşman. Çizerken çizgine ya da sana değerse can kaybedersin. Bakterinin olmadığı taraf temizlenir.</p></div></div>
+       <div class="howRow"><span class="howTiers"><img src="${bossAssetUrl}" alt=""><img src="${boss2AssetUrl}" alt=""><img src="${boss3AssetUrl}" alt=""></span><div><b>Bakteri</b>
+         <p>Büyük düşman. Çizerken çizgine ya da sana değerse can kaybedersin. Bakterinin olmadığı taraf temizlenir.
+            Kür ilerledikçe evrilir: 4. günde büyür, 7. günde en büyük ve en hızlı hâline gelir.</p></div></div>
        <div class="howRow"><span class="howPair"><img src="${minionFlagellaAssetUrl}" alt=""><img src="${minionSporeAssetUrl}" alt=""></span><div><b>Mikroplar</b>
          <p>Küçük ve hızlı; onlar da çizgini keser. Kapattığın alanın içinde kalan mikrop yok olur.</p></div></div>
        <div class="howRow"><span class="howBreath"></span><div><b>Nefes</b>
@@ -3452,7 +3922,7 @@ function closeTrail(){
      artık bir kapı değil bir yatırım: açtıkça bütün saha lehine dönüyor
      (bkz. flowMult, movePlayer, updateEnemies, doz yanması) ve gün sonunda
      akış bonusu olarak ayrıca ödüllendiriliyor (bkz. levelClear). */
-  Info.onCapture();   // GOAL-031: kestikçe bilgi şeridi ilerliyor
+  Info.onCapture((minX+maxX)/2, (minY+maxY)/2);   // GOAL-031: kestikçe bilgi şeridi ilerliyor
   if(G.pct >= G.level.target) levelClear();
   syncHUD();
 }
@@ -3576,7 +4046,16 @@ function levelClear(){
   G.score += Math.max(0,bonus) + breathBonus + flowBonus;
   Sound.clear();
   const last = G.levelIdx >= LEVELS.length-1;
-  showPanel(
+  /* Günün bütün bilgileri, acele etmeden okunacak bir anda — oynarken
+     kaçırılanlar da burada. Rengi o bölgenin harita rengi. */
+  const facts = FACTS[G.level.day-1] || [];
+  const learned = facts.length ? `<div class="learned" style="--rc:${ANAT_COL[G.level.region].join(',')}">
+       <div class="lk">BUGÜN ÖĞRENDİKLERİN · ${escapeHtml(G.level.regionName.toLocaleUpperCase('tr-TR'))}</div>
+       <ul>${facts.map(f => `<li><b>${escapeHtml(f.t)}</b><p>${escapeHtml(f.b)}</p></li>`).join('')}</ul>
+     </div>` : '';
+  // panel, kalan doku eriyip iyileşmiş resmin tamamı göründükten sonra
+  const tok = ++ClearReveal.tok;
+  ClearReveal.start(() => { if(tok === ClearReveal.tok && G.state === 'clear') showPanel(
     `<div class="kicker">GÜN ${String(G.level.day).padStart(2,'0')} TAMAMLANDI</div>
      <div class="title">%${Math.floor(G.pct*100)} <em>temizlendi</em></div>
      <p class="note">${G.level.med}</p>
@@ -3586,8 +4065,53 @@ function levelClear(){
        <div><span>NEFES SERİSİ</span><b>${G.breathStreak}</b></div>
        <div><span>TOPLAM SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
      </div>
-     <div class="acts"><button class="cta" data-a="next">${last?'SON GÜNE GEÇ':'ERTESİ GÜN'}</button></div>`);
+     ${learned}
+     <div class="acts"><button class="cta" data-a="next">${last?'SON GÜNE GEÇ':'ERTESİ GÜN'}</button></div>`); });
 }
+/* Gün sonu açılışı: hedefe ulaşılınca kalan hastalıklı doku dipten tepeye
+   (nefesin yönünde) eriyor, düşmanlar sönüyor ve açılan resmin tamamı
+   görünüyor — gün %70 civarında bittiği için oyuncu iyileşen dokunun bütününü
+   başka türlü hiç görmüyordu. Hareket azaltma tercihinde ve ticker durmuşken
+   (denge testi) beklemeden geçiyor. */
+const ClearReveal = {
+  on:false, p:0, key:null, done:null, puffT:0, tok:0, hold:0, DUR:1.6, HOLD:1.1,   // HOLD: açılan resim panelden önce ekranda
+  start(done){
+    this.cancel();
+    this.done = done;
+    const instant = matchMedia('(prefers-reduced-motion: reduce)').matches || !app.ticker.started;
+    const key = this.key || (this.key = new Float32Array(GW*GH));
+    const y0 = cavBB.y0, h = Math.max(1, cavBB.y1 - cavBB.y0);
+    for(let i=0;i<GW*GH;i++){
+      const y = (i/GW)|0, hsh = ((i*2654435761)>>>0)/4294967296;
+      key[i] = clamp((cavBB.y1 - 1 - y)/h, 0, 1)*.8 + hsh*.2;
+    }
+    this.p = instant ? 1 : 0; this.on = true; this.puffT = 0; this.hold = instant ? 0 : this.HOLD;
+    if(instant) this.tick(0);
+  },
+  tick(dt){
+    if(!this.on) return;
+    this.p = Math.min(1, this.p + dt/this.DUR);
+    const q = this.p*1.02, key = this.key;
+    let y0 = GH, y1 = -1;                 // yalnızca bu karede değişen satır bandı
+    for(let i=0;i<GW*GH;i++) if(cavity[i] && cells[i] !== FILL && key[i] <= q){
+      cells[i] = FILL; const y = (i/GW)|0; if(y < y0) y0 = y; if(y > y1) y1 = y;
+    }
+    if(y1 >= 0) rasterRegion(0, y0, GW-1, y1);
+    // eriyen cephede yukarı süzülen hava
+    this.puffT -= dt;
+    if(this.puffT <= 0 && this.p < 1){
+      this.puffT = .09;
+      spawnBreathPuffs(Math.round(lerp(cavBB.y1 - 1, cavBB.y0, this.p*.9)), 2);
+    }
+    const a = clamp(1 - this.p*1.8, 0, 1);
+    for(const b of G.bosses){ b.s.alpha = a; b.g.alpha *= a; }
+    for(const m of G.minions) m.s.alpha = a;
+    for(const b of G.bullets) b.s.alpha = a;
+    for(const p of G.pus){ p.s.alpha = a; p.g.alpha *= a; }
+    if(this.p >= 1 && (this.hold -= dt) <= 0){ const d = this.done; this.on = false; this.done = null; if(d) d(); }
+  },
+  cancel(){ this.on = false; this.done = null; }
+};
 function die(){
   if(G.invuln > 0) return;
   G.lives--; Sound.hit(); G.shake = 14;
@@ -3757,25 +4281,18 @@ function updateEnemies(dt){
    15. ÇİZİM
    ========================================================================= */
 function drawTrail(){
-  let n = 0;
-  if(G.drawing && G.corners.length){
-    const pts = G.corners.concat([{x:G.px, y:G.py}]);
-    for(let i=0;i<pts.length-1 && n<trailCore.length;i++){
-      const a = pts[i], b = pts[i+1];
-      if(a.x === b.x && a.y === b.y) continue;
-      const s = trailCore[n], g = trailGlow[n]; n++;
-      const mx = ((a.x+b.x)/2 + .5)*CS, my = ((a.y+b.y)/2 + .5)*CS;
-      const w = Math.abs(b.x-a.x)*CS, h = Math.abs(b.y-a.y)*CS;
-      s.visible = g.visible = true;
-      s.x = g.x = mx; s.y = g.y = my;
-      s.width  = Math.max(w, 3); s.height = Math.max(h, 3);
-      g.width  = w > h ? w : 14;  g.height = h > w ? h : 14;
-    }
+  trailGlowG.clear(); trailCoreG.clear();
+  if(!G.drawing || !G.corners.length) return;
+  // köşeler + oyuncunun bulunduğu (kesirli ilerlemeyle) nokta, saha pikselinde
+  const pts = [];
+  for(const c of G.corners.concat([{x:G.px, y:G.py}])){
+    const p = [(c.x + .5)*CS, (c.y + .5)*CS], q = pts[pts.length-1];
+    if(!q || q[0] !== p[0] || q[1] !== p[1]) pts.push(p);
   }
-  for(let i=n;i<trailCore.length;i++){
-    if(!trailCore[i].visible) break;
-    trailCore[i].visible = false; trailGlow[i].visible = false;
-  }
+  if(pts.length < 2) return;
+  strokePath(trailGlowG, pts, 16, 0x35e0d8, .16);
+  strokePath(trailGlowG, pts, 8, 0x35e0d8, .30);
+  strokePath(trailCoreG, pts, 3.2, 0xdafffb, 1);
 }
 function render(dt){
   G.time += dt;
@@ -3792,12 +4309,17 @@ function render(dt){
   playerGlow.alpha = (.34 + Math.sin(t*4.2)*.12) * blink * (G.drawing ? 1.5 : 1);
   playerGlow.width = playerGlow.height = 96 + Math.sin(t*4.2)*12;
   playerLight.alpha = (.14 + Math.sin(t*2.1)*.03) * (G.drawing ? 1.6 : 1);
+  drawShield(pxp, pyp, t);
+  // iyileşmiş dokuda yukarı süzülen hava (nefes anında parlıyor)
+  healLive.tilePosition.y -= dt*9*(1 + G.flow*.8);
+  healLive.tilePosition.x = Math.sin(t*.23)*14;
+  healLive.alpha = .32 + Math.sin(t*.7)*.06 + G.breathFlash*.4;
 
   for(const b of G.bosses){
     const pulse = 1 + Math.sin(b.t*2.1)*.045;
     b.s.x = b.g.x = b.x*CS; b.s.y = b.g.y = b.y*CS;
-    b.s.width = b.s.height = b.r*2*CS*pulse;
-    b.s.rotation += dt*.13;
+    b.s.width = b.r*2*CS*pulse; b.s.height = b.s.width*b.ar;
+    b.s.rotation = Math.sin(b.t*.9)*.16;      // yüzü var: dönmüyor, sallanıyor
     b.g.width = b.g.height = b.r*3.3*CS*pulse;
     b.g.alpha = .28 + Math.sin(b.t*2.7)*.1;
   }
@@ -3963,6 +4485,7 @@ function layout(pass){
   scrField = { x:root.x, y:root.y, s:s };
   scrFrame = { x0:root.x + fx0*CS*s, y0:root.y + fy0*CS*s, x1:root.x + fx1*CS*s, y1:root.y + fy1*CS*s };
   placeInfoRail(w, h);
+  Info.fit();
   Cine.resize();
 }
 /* GOAL-031: bilgi şeridinin yeri. Önce tahtanın solundaki boşluk (masaüstü),
@@ -3973,6 +4496,7 @@ function placeInfoRail(w, h){
   // Ölçü kadraj: dışındaki kemik payı oynanmayan alan, şerit oraya taşabilir.
   const left = fr.x0, below = h - fr.y1;
   el.classList.remove('compact','gone');
+  Info.avail = 0; Info.autoCompact = false;
   st.top = st.bottom = st.left = st.right = st.width = 'auto';
   if(hudSide){
     const hudB = (document.getElementById('hud').querySelector('.hudInner').getBoundingClientRect().bottom) + 14;
@@ -3981,6 +4505,7 @@ function placeInfoRail(w, h){
     st.left = '16px'; st.width = (sideW - 32) + 'px'; st.bottom = (toolsLeft ? 78 : 12) + 'px';
     if(room < 96) el.classList.add('gone');
     else if(room < 150) el.classList.add('compact');
+    Info.avail = room;
     return;
   }
   if(left >= 250){
@@ -3994,6 +4519,7 @@ function placeInfoRail(w, h){
     // sağ alttaki SES/DUR düğmelerine taşmasın
     const r = Math.max(12, w - fr.x1);
     st.right = (below < 200 ? Math.max(r, 150) : r) + 'px';
+    Info.avail = below - 12 - 14;
   } else {
     el.classList.add('compact');
     st.left = '12px'; st.right = '150px';
@@ -4022,6 +4548,7 @@ app.ticker.add(()=>{
     updateScorePops(dt*.4);
   }
   render(dt);
+  ClearReveal.tick(dt);   // render'dan sonra: sönen düşmanların alfası render'ın üstüne
   Info.tick();   // GOAL-031
   Guide.update(dt);   // GOAL-038
 });

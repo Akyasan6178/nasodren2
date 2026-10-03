@@ -186,20 +186,31 @@ const PFW = GW*CS, PFH = GH*CS;
    piksel/hücre) yazılı: prosedürel çizen yerler PX = SC/AU ile ölçekleniyor,
    yumuşak gürültüler eski çözünürlükte üretilip büyütülüyor (fbmHi), yani
    bölüm hazırlığı 4 kat değil ~1,5-2 kat uzuyor. */
-const SC = (navigator.hardwareConcurrency || 8) <= 4 ? 4 : 6, HW = GW*SC, HH = GH*SC;
+// zayıf cihaz: az çekirdek ya da az bellek (Chrome/Android'in bildirdiği GB) → daha küçük katmanlar
+const SC = ((navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 2) ? 4 : 6, HW = GW*SC, HH = GH*SC;
 const AU = 3, VW = GW*AU, VH = GH*AU, PX = SC/AU;
 /* GOAL-015: oyun alani artik dikdortgen degil, burun/sinus boslugu. Yuzde
    hesabi sabit INTERIOR yerine cavCount uzerinden yapiliyor (bkz. bolum 4b). */
 const EMPTY = 0, FILL = 1, TRAIL = 2;
 
 const PU = { SPEED:0, FREEZE:1, LASER:2, BOMB:3, DOSE:4 };
+/* tag: sahadaki etikette ve NASIL OYNANIR'da duran tek kelimelik ad. label
+   bilimsel adı; ne işe yaradığını oyun oynamayan biri de tag'den okusun. */
 const PU_META = [
-  { key:'SPEED',  label:'Sürfaktan hızı',    letter:'💨', color:'#35e0d8', dur:9  },
-  { key:'FREEZE', label:'Ozmotik dondurma',  letter:'❄', color:'#8fb9ff', dur:6  },
-  { key:'LASER',  label:'Siliyer aktivasyon',letter:'⚡', color:'#9ef05a', dur:10 },
-  { key:'BOMB',   label:'Trigeminal refleks',letter:'💥', color:'#ff4d9d', dur:0  },
-  { key:'DOSE',   label:'Doz yenilendi',     letter:'💧', color:'#ffc24a', dur:0  }
+  { key:'SPEED',  label:'Sürfaktan hızı',    tag:'HIZ',     letter:'💨', color:'#35e0d8', dur:9  },
+  { key:'FREEZE', label:'Ozmotik dondurma',  tag:'DONDUR',  letter:'❄', color:'#8fb9ff', dur:6  },
+  { key:'LASER',  label:'Siliyer aktivasyon',tag:'ATEŞ',    letter:'⚡', color:'#9ef05a', dur:10 },
+  { key:'BOMB',   label:'Trigeminal refleks',tag:'TEMİZLE', letter:'💥', color:'#ff4d9d', dur:0  },
+  { key:'DOSE',   label:'Doz yenilendi',     tag:'DOZ',     letter:'💧', color:'#ffc24a', dur:0  }
 ];
+/* Oyuncu ve güçlendiricilerin boyu. Saha birimindeki taban boy (34) sahayla
+   birlikte ölçekleniyor, ama ekrandaki boy bir aralıkta tutuluyor: telefonda
+   saha küçülünce 13 piksele inip kayboluyor, büyük ekranda da sahayı
+   kalabalıklaştırıyorlardı. Aralık telefonda biraz daha dar (bkz. layout →
+   playerW/puW). Yalnızca görsel — çarpışma ve toplama ızgara hücresiyle. */
+const PLAYER_SIZE = 34, PU_SIZE = 32;
+const PLAYER_PX = { desk:[28, 36], touch:[24, 30] };   // ekranda en az / en çok
+const PU_PX     = { desk:[24, 30], touch:[21, 26] };
 
 /* GOAL-036: kür 10 günden 8 güne indi (bölgeler yalnızca sinuzit.jfif'teki
    dört yapı). Tema listesi on günlük tedavi yayı olarak duruyor; LEVELS
@@ -247,8 +258,9 @@ const LEVEL_THEMES = [
    küçük tahta kısa kesim demek).
    Hedef eğri: aynı test oyuncusu 1. günü neredeyse her seferinde, son günü
    üç denemeden ikisinde geçiyor; aradaki her gün bir öncekinden biraz zor.
-   Bunun üstüne oyuncu kaybederse günü tekrarlayabiliyor ve her yeni güne +1
-   canla giriyor. Bir değer değişirse eğri yeniden ölçülmeli: tools/denge-testi.mjs.
+   Bunun üstüne oyuncu her yeni güne +1 canla giriyor. (Kaybedince "günü
+   tekrarla" seçeneği vardı; kaldırıldı — oyun bitince kür baştan başlıyor,
+   bölüm seçiminden istenen güne girilebiliyor.) Bir değer değişirse eğri yeniden ölçülmeli: tools/denge-testi.mjs.
    Maksiller ve frontal günleri harita görsellerine (assets/board), bakteri de
    üç evreye (BOSS_TIER_BY_DAY: yarıçap 7 → 9 → 11, son evre en hızlı) geçince
    yeniden ölçüldü. İç bölmesi olmayan açık maksiller kesede ve büyüyen
@@ -324,40 +336,75 @@ LEVELS.forEach((L,i) => {
    oyuncu aynı şeyleri tekrar okumasın. Anatomi ve fizyoloji bilgisi; ilacın
    kendisine dair iddia bilerek yok — o metinler marka onayından geçmeli.
    Başlık 2-4 kelime, gövde tek-iki cümle: göz ucuyla okunacak kadar.
+   k: aynı bilginin kısa hâli (en çok ~60 karakter). Telefonda tahtanın altında
+   tam karta yer yokken başlıkla birlikte iki satıra sığıp bir bakışta
+   okunsun diye; uzun hâli yer olduğunda, duraklatmada ve gün sonunda.
    ------------------------------------------------------------------------- */
 const FACTS = [
-  [ { t:'Üç kat konka', b:'Burnun yan duvarlarında üç kıvrımlı çıkıntı var: alt, orta ve üst konka. Havayı ısıtıp nemlendiren yüzeyi büyütürler.' },
-    { t:'Tıkanıklığın kaynağı', b:'Akut tıkanıklıkta konkaların içindeki damar ağı kanla dolar, mukoza şişer; havanın geçtiği aralık birkaç milimetreye iner.' },
-    { t:'Nazal siklus', b:'Konkalar birkaç saatte bir sırayla şişip iner. Bu yüzden çoğu zaman burnun bir tarafı diğerinden daha açıktır.' },
-    { t:'Günde binlerce litre', b:'Bir yetişkin günde yaklaşık 10.000 litre hava solur. Dinlenirken bu havanın büyük kısmı önce burundan geçer.' } ],
-  [ { t:'Septum', b:'Burnu ikiye ayıran orta duvar kıkırdak ve kemikten oluşur. Yetişkinlerin çoğunda hafifçe bir yana eğiktir.' },
-    { t:'Ödem', b:'İltihapta damarlardan sızan sıvı mukozada birikir. Şişen doku hem hava yolunu hem de sinüslerin ağızlarını daraltır.' },
-    { t:'Havayı hazırlayan yol', b:'Burun, soluduğun havayı akciğere ulaşmadan önce vücut sıcaklığına yaklaştırır ve nemlendirir.' },
-    { t:'Sinüslerin kapısı', b:'Bütün sinüsler burun boşluğuna küçük ağızlarla açılır. Sinüslere giden yol da buradan geçer.' } ],
-  [ { t:'En büyük sinüs', b:'Maksiller sinüs yanak kemiğinin içindedir. Yetişkinde ortalama 15 ml hacmiyle sinüslerin en büyüğüdür.' },
-    { t:'Ağzı tepede', b:'Doğal ağzı (ostium) iç duvarın tepesine yakındır. Sinüs boşalmak için yerçekimine değil, silyalara güvenir.' },
-    { t:'Silyer yol', b:'Siller salgıyı sinüsün tabanından başlayıp duvarlar boyunca kıvrılan bir yolla ostiuma doğru taşır.' },
-    { t:'Dişlere komşu', b:'Üst azı dişlerinin kökleri sinüs tabanına çok yakındır; bazı sinüzitlerin kaynağı bir diştir.' } ],
-  [ { t:'Göz tabanı', b:'Sinüsün tavanı aynı zamanda göz çukurunun tabanıdır. İçinden yanağa duyu taşıyan infraorbital sinir geçer.' },
-    { t:'Tıkalı sinüs neden ağrır?', b:'Ağzı kapanan sinüste salgı birikir ve basınç değişir; yanakta dolgunluk ve ağrı buradan gelir.' },
-    { t:'Ostium açılınca', b:'Ağız yeniden açıldığında sinüse hava girer, basınç dengelenir ve biriken salgı akmaya başlar.' },
-    { t:'Dişlerle büyür', b:'Maksiller sinüs doğumda çok küçüktür; kalıcı dişler çıktıkça aşağı doğru büyüyerek erişkin boyutuna ulaşır.' } ],
-  [ { t:'Petek', b:'Etmoid sinüs tek bir boşluk değil: her iki yanda 3 ile 18 arası küçük hava hücresinden oluşan bir labirent.' },
-    { t:'Kâğıt duvar', b:'Hücreleri göz çukurundan ayıran duvara lamina papyracea denir; adı gibi kâğıt inceliğindedir.' },
-    { t:'Silyaların ritmi', b:'Her epitel hücresinde yüzlerce sil vardır; saniyede 10-15 kez çırparak mukus örtüsünü taşırlar.' },
-    { t:'Temizlik bandı', b:'Sağlıklı mukozada mukus örtüsü dakikada birkaç milimetre hızla boğaza doğru ilerler.' } ],
-  [ { t:'Ön ve arka hücreler', b:'Ön etmoid hücreleri orta meatusa, arka hücreler üst meatusa açılır.' },
-    { t:'Doğuştan var', b:'Etmoid hücreleri doğumda zaten vardır; çocuklarda en sık tutulan sinüsler de bunlardır.' },
-    { t:'Mukozanın kalkanı', b:'Mukusun içindeki antikorlar ve enzimler mikropları daha dokuya ulaşmadan etkisiz hâle getirir.' },
-    { t:'Koku yarığı', b:'Etmoidin tavanına yakın, septumun yanındaki dar yarıkta koku epiteli bulunur. Burası tıkanınca koku azalır.' } ],
-  [ { t:'Alındaki boşluk', b:'Frontal sinüsler kaşların üstünde, alın kemiğinin iki tabakası arasındadır. Sağ ve sol çoğu zaman farklı büyüklüktedir.' },
-    { t:'Parmak izi gibi', b:'Frontal sinüsün kıvrımlı kenarı kişiye özgüdür; röntgenden kimlik tespitinde bile kullanılır.' },
-    { t:'En uzun yol', b:'Frontal sinüs, dar ve kıvrımlı frontal resesle aşağıya, orta meatusa boşalır. Tıkanmaya en açık yol budur.' },
-    { t:'Kronik sinüzit', b:'Belirtiler 12 haftadan uzun sürerse kronik sinüzitten söz edilir.' } ],
-  [ { t:'Geç gelişen sinüs', b:'Frontal sinüs doğumda yok denecek kadar küçüktür; okul çağında belirginleşir, ergenlikte gelişimini tamamlar.' },
-    { t:'Herkeste yok', b:'Her yüz kişiden birkaçında frontal sinüs hiç gelişmez.' },
-    { t:'Neden sinüsümüz var?', b:'Görevleri tam bilinmiyor; kafatasını hafifletmek ve sese tını katmak en bilinen açıklamalar.' },
-    { t:'Tam havalandırma', b:'Bütün ağızlar açıkken sinüsler burunla birlikte havalanır ve salgı silyalarla kendiliğinden akar.' } ]
+  [ { t:'Üç kat konka', b:'Burnun yan duvarlarında üç kıvrımlı çıkıntı var: alt, orta ve üst konka. Havayı ısıtıp nemlendiren yüzeyi büyütürler.',
+      k:'Burnun yan duvarında üç kıvrım var; havayı ısıtıp nemlendirirler.' },
+    { t:'Tıkanıklığın kaynağı', b:'Akut tıkanıklıkta konkaların içindeki damar ağı kanla dolar, mukoza şişer; havanın geçtiği aralık birkaç milimetreye iner.',
+      k:'Konka damarları kanla dolar, mukoza şişer, hava yolu daralır.' },
+    { t:'Nazal siklus', b:'Konkalar birkaç saatte bir sırayla şişip iner. Bu yüzden çoğu zaman burnun bir tarafı diğerinden daha açıktır.',
+      k:'Konkalar sırayla şişip iner; burnun bir yanı genelde daha açıktır.' },
+    { t:'Günde binlerce litre', b:'Bir yetişkin günde yaklaşık 10.000 litre hava solur. Dinlenirken bu havanın büyük kısmı önce burundan geçer.',
+      k:'Günde yaklaşık 10.000 litre hava soluruz, çoğu burundan.' } ],
+  [ { t:'Septum', b:'Burnu ikiye ayıran orta duvar kıkırdak ve kemikten oluşur. Yetişkinlerin çoğunda hafifçe bir yana eğiktir.',
+      k:'Burnu ikiye ayıran orta duvar; çoğu insanda hafifçe eğiktir.' },
+    { t:'Ödem', b:'İltihapta damarlardan sızan sıvı mukozada birikir. Şişen doku hem hava yolunu hem de sinüslerin ağızlarını daraltır.',
+      k:'Damarlardan sızan sıvı mukozayı şişirir, sinüs ağızlarını daraltır.' },
+    { t:'Havayı hazırlayan yol', b:'Burun, soluduğun havayı akciğere ulaşmadan önce vücut sıcaklığına yaklaştırır ve nemlendirir.',
+      k:'Burun havayı akciğere varmadan ısıtır ve nemlendirir.' },
+    { t:'Sinüslerin kapısı', b:'Bütün sinüsler burun boşluğuna küçük ağızlarla açılır. Sinüslere giden yol da buradan geçer.',
+      k:'Bütün sinüsler burun boşluğuna küçük ağızlarla açılır.' } ],
+  [ { t:'En büyük sinüs', b:'Maksiller sinüs yanak kemiğinin içindedir. Yetişkinde ortalama 15 ml hacmiyle sinüslerin en büyüğüdür.',
+      k:'Yanak kemiğinde, yaklaşık 15 ml; sinüslerin en büyüğü.' },
+    { t:'Ağzı tepede', b:'Doğal ağzı (ostium) iç duvarın tepesine yakındır. Sinüs boşalmak için yerçekimine değil, silyalara güvenir.',
+      k:'Ağzı iç duvarın tepesinde; salgıyı silyalar yukarı taşır.' },
+    { t:'Silyer yol', b:'Siller salgıyı sinüsün tabanından başlayıp duvarlar boyunca kıvrılan bir yolla ostiuma doğru taşır.',
+      k:'Siller salgıyı tabandan duvarlar boyunca ostiuma taşır.' },
+    { t:'Dişlere komşu', b:'Üst azı dişlerinin kökleri sinüs tabanına çok yakındır; bazı sinüzitlerin kaynağı bir diştir.',
+      k:'Üst azı dişlerinin kökleri sinüs tabanına çok yakındır.' } ],
+  [ { t:'Göz tabanı', b:'Sinüsün tavanı aynı zamanda göz çukurunun tabanıdır. İçinden yanağa duyu taşıyan infraorbital sinir geçer.',
+      k:'Sinüsün tavanı, göz çukurunun tabanıdır.' },
+    { t:'Tıkalı sinüs neden ağrır?', b:'Ağzı kapanan sinüste salgı birikir ve basınç değişir; yanakta dolgunluk ve ağrı buradan gelir.',
+      k:'Ağzı kapanınca salgı birikir, basınç yanağı ağrıtır.' },
+    { t:'Ostium açılınca', b:'Ağız yeniden açıldığında sinüse hava girer, basınç dengelenir ve biriken salgı akmaya başlar.',
+      k:'Hava girer, basınç dengelenir, biriken salgı akar.' },
+    { t:'Dişlerle büyür', b:'Maksiller sinüs doğumda çok küçüktür; kalıcı dişler çıktıkça aşağı doğru büyüyerek erişkin boyutuna ulaşır.',
+      k:'Doğumda küçüktür; kalıcı dişler çıktıkça büyür.' } ],
+  [ { t:'Petek', b:'Etmoid sinüs tek bir boşluk değil: her iki yanda 3 ile 18 arası küçük hava hücresinden oluşan bir labirent.',
+      k:'Tek boşluk değil: her yanda 3-18 küçük hava hücresi.' },
+    { t:'Kâğıt duvar', b:'Hücreleri göz çukurundan ayıran duvara lamina papyracea denir; adı gibi kâğıt inceliğindedir.',
+      k:'Göz çukuruyla arasındaki duvar kâğıt inceliğindedir.' },
+    { t:'Silyaların ritmi', b:'Her epitel hücresinde yüzlerce sil vardır; saniyede 10-15 kez çırparak mukus örtüsünü taşırlar.',
+      k:'Siller saniyede 10-15 kez çırparak mukusu taşır.' },
+    { t:'Temizlik bandı', b:'Sağlıklı mukozada mukus örtüsü dakikada birkaç milimetre hızla boğaza doğru ilerler.',
+      k:'Mukus örtüsü dakikada birkaç milimetre boğaza ilerler.' } ],
+  [ { t:'Ön ve arka hücreler', b:'Ön etmoid hücreleri orta meatusa, arka hücreler üst meatusa açılır.',
+      k:'Ön hücreler orta, arka hücreler üst meatusa açılır.' },
+    { t:'Doğuştan var', b:'Etmoid hücreleri doğumda zaten vardır; çocuklarda en sık tutulan sinüsler de bunlardır.',
+      k:'Doğumda vardır; çocuklarda en sık tutulan sinüslerdir.' },
+    { t:'Mukozanın kalkanı', b:'Mukusun içindeki antikorlar ve enzimler mikropları daha dokuya ulaşmadan etkisiz hâle getirir.',
+      k:'Mukustaki antikor ve enzimler mikropları etkisiz bırakır.' },
+    { t:'Koku yarığı', b:'Etmoidin tavanına yakın, septumun yanındaki dar yarıkta koku epiteli bulunur. Burası tıkanınca koku azalır.',
+      k:'Etmoidin tavanında koku epiteli var; tıkanınca koku azalır.' } ],
+  [ { t:'Alındaki boşluk', b:'Frontal sinüsler kaşların üstünde, alın kemiğinin iki tabakası arasındadır. Sağ ve sol çoğu zaman farklı büyüklüktedir.',
+      k:'Kaşların üstünde, alın kemiğinde; iki yanı çoğu zaman farklı.' },
+    { t:'Parmak izi gibi', b:'Frontal sinüsün kıvrımlı kenarı kişiye özgüdür; röntgenden kimlik tespitinde bile kullanılır.',
+      k:'Kıvrımlı kenarı kişiye özgü; kimlik tespitinde kullanılır.' },
+    { t:'En uzun yol', b:'Frontal sinüs, dar ve kıvrımlı frontal resesle aşağıya, orta meatusa boşalır. Tıkanmaya en açık yol budur.',
+      k:'Dar ve kıvrımlı bir kanalla boşalır; en kolay tıkanan yol.' },
+    { t:'Kronik sinüzit', b:'Belirtiler 12 haftadan uzun sürerse kronik sinüzitten söz edilir.',
+      k:'Belirtiler 12 haftadan uzun sürerse kronik sayılır.' } ],
+  [ { t:'Geç gelişen sinüs', b:'Frontal sinüs doğumda yok denecek kadar küçüktür; okul çağında belirginleşir, ergenlikte gelişimini tamamlar.',
+      k:'Doğumda çok küçüktür; ergenlikte gelişimini tamamlar.' },
+    { t:'Herkeste yok', b:'Her yüz kişiden birkaçında frontal sinüs hiç gelişmez.',
+      k:'Her yüz kişiden birkaçında frontal sinüs hiç gelişmez.' },
+    { t:'Neden sinüsümüz var?', b:'Görevleri tam bilinmiyor; kafatasını hafifletmek ve sese tını katmak en bilinen açıklamalar.',
+      k:'Tam bilinmiyor; kafatasını hafifletir, sese tını katar.' },
+    { t:'Tam havalandırma', b:'Bütün ağızlar açıkken sinüsler burunla birlikte havalanır ve salgı silyalarla kendiliğinden akar.',
+      k:'Ağızlar açıkken sinüsler havalanır, salgı kendiliğinden akar.' } ]
 ];
 
 const PLAYER_SPD = 38, PLAYER_SPD_FAST = 60, MEGA_SHARE = .12;
@@ -527,7 +574,7 @@ function texPowerup(meta){
   c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,.35)';
   c.strokeRect(-R+6,-R+6,(R-6)*2,(R-6)*2);
   c.rotate(-Math.PI/4);
-  c.font = '38px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji","Roboto Condensed",sans-serif';
+  c.font = '46px "Segoe UI Emoji","Noto Color Emoji","Apple Color Emoji","Roboto Condensed",sans-serif';
   c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillStyle = meta.color;
   c.shadowColor = meta.color; c.shadowBlur = 16;
@@ -1715,6 +1762,7 @@ let cavBB = { x0:0, y0:0, x1:GW, y1:GH };
 /* Saha içi yazı/etiketlerin ölçek çarpanı: saha küçüldükçe büyüyorlar ki
    telefonda "HAVA GİRİŞİ" gibi bilgiler okunaklı kalsın (bkz. layout). */
 let uiScale = 1;
+let playerW = PLAYER_SIZE, puW = PU_SIZE;   // saha birimi; layout() ekrandaki aralığa göre ayarlıyor
 /* Ekranda gercekten gorunen saha dikdortgeni (saha pikseli). Kadraj kemik
    payini kirptigi icin kenara yakin etiketler disarida kalabiliyor. */
 let frame = { x0:0, y0:0, x1:GW*CS, y1:GH*CS };
@@ -2074,18 +2122,18 @@ function strokeArc(g, cx, cy, r, a0, a1, width, color, alpha){
 function drawShield(x, y, t){
   const g = shieldG; g.clear();
   if(G.state !== 'play' && G.state !== 'paused'){ return; }
-  const dr = clamp(G.dose/Math.max(1, G.doseMax), 0, 1), R = 24, top = -Math.PI/2;
+  const u = playerW/PLAYER_SIZE, dr = clamp(G.dose/Math.max(1, G.doseMax), 0, 1), R = 24*u, top = -Math.PI/2;
   if(dr <= 0){                                 // kırık halka
     const a = .45 + .35*Math.sin(t*7);
-    for(let k=0;k<6;k++){ const a0 = top + k/6*Math.PI*2 + .18; strokeArc(g, x, y, R, a0, a0 + .55, 2.6, 0xff4d6d, a); }
+    for(let k=0;k<6;k++){ const a0 = top + k/6*Math.PI*2 + .18; strokeArc(g, x, y, R, a0, a0 + .55, 2.6*u, 0xff4d6d, a); }
     return;
   }
   const dim = G.drawing ? .38 : 1;             // çizerken kalkan korumuyor
   const col = dr <= .15 ? 0xff4d6d : dr < .30 ? 0xff9a3c : 0xffc24a;
   const pulse = dr <= .15 ? .55 + .45*Math.sin(t*10) : 1;
-  strokeArc(g, x, y, R, 0, Math.PI*2, 2.4, 0xffffff, .10*dim);          // iz
-  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 3, col, .95*dim*pulse);
-  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 7, col, .18*dim*pulse);  // hafif ışıma
+  strokeArc(g, x, y, R, 0, Math.PI*2, 2.4*u, 0xffffff, .10*dim);          // iz
+  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 3*u, col, .95*dim*pulse);
+  strokeArc(g, x, y, R, top, top + dr*Math.PI*2, 7*u, col, .18*dim*pulse);  // hafif ışıma
 }
 
 function pool(container, make, n){
@@ -2399,7 +2447,11 @@ function syncHUD(){
     const m = PU_META.find(p=>p.key===k);
     bf += '<div class="buff">'+m.letter+' '+Math.ceil(G.buffs[k])+'s</div>';
   }
-  if(UI.buffs.innerHTML !== bf) UI.buffs.innerHTML = bf;
+  if(UI.buffs.innerHTML !== bf){
+    UI.buffs.innerHTML = bf;
+    // yan çubukta uyarılar HUD'u uzatıyor: bilgi kartı altta kalan yere yeniden sığsın
+    if(document.body.classList.contains('hudSide')){ placeInfoRail(innerWidth, innerHeight); Info.fit(); }
+  }
 
   // GOAL-015: nefes geri sayımı + havanın ulaştığı yol, tek modül
   const ar = clamp(breath.reach,0,1), full = breath.top;
@@ -2415,8 +2467,8 @@ function syncHUD(){
   UI.breathBar.style.width = (clamp(G.breathT/Math.max(1,G.level.breath),0,1)*100).toFixed(1)+'%';
   UI.breathVal.textContent = Math.max(0,Math.ceil(G.breathT))+' sn';
 }
-function showPanel(html){ UI.hint.classList.remove('on'); UI.plate.innerHTML = html; UI.overlay.classList.add('on');
-  const b = UI.plate.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus(), 30); }
+function showPanel(html){ UI.hint.classList.remove('on'); UI.plate.innerHTML = html; UI.overlay.classList.add('on'); UI.overlay.scrollTop = 0;
+  const b = UI.plate.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus({preventScroll:true}), 30); }
 function hidePanel(){ UI.overlay.classList.remove('on'); }
 UI.overlay.addEventListener('click', e=>{
   const b = e.target.closest('button[data-a]'); if(!b) return;
@@ -2433,13 +2485,13 @@ function showMenuScreen(html){
   UI.hint.classList.remove('on');
   hidePanel(); // olası açık overlay (pause vb.) ile çakışmasın
   UI.menuContent.innerHTML = html;
-  UI.menuScreen.classList.add('on');
+  UI.menuScreen.classList.add('on'); UI.menuScreen.scrollTop = 0;   // yeni ekran hep başından açılsın
   /* GOAL-026: menü perdesi artık opak değil, buzlu cam — arkada sahanın
      kendisi duruyor. Bu yüzden HUD ve araç düğmeleri camın ardından sızmasın
      diye gizleniyor (display ile değil opacity ile: layout() HUD yüksekliğini
      ölçüyor, display:none olsa kadraj sıçrardı). */
   document.body.classList.add('menuOn');
-  const b = UI.menuContent.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus(), 30);
+  const b = UI.menuContent.querySelector('button[data-a]'); if(b) setTimeout(()=>b.focus({preventScroll:true}), 30);
 }
 function hideMenuScreen(){
   UI.menuScreen.classList.remove('on');
@@ -2507,7 +2559,8 @@ function loadHighScores(){
 }
 function saveHighScore(name, score){
   const list = loadHighScores();
-  list.push({ name, score, day:G.level.day });
+  // done: kür tamamlandı mı (ödül listesi ayırt edebilsin)
+  list.push({ name, score, day:G.level.day, done:G.state === 'won' });
   list.sort((a,b)=>b.score-a.score);
   list.length = Math.min(list.length, 10);
   try{ localStorage.setItem(HS_KEY, JSON.stringify(list)); }catch(e){}
@@ -2537,14 +2590,21 @@ function showGameOverNameEntry(){
        <div><span>SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
        <div><span>TEMİZLENEN</span><b>%${Math.floor(G.pct*100)}</b></div>
      </div>
-     <div class="menuStack">
-       <button class="menuBtn primary" data-a="retryday">GÜNÜ TEKRARLA</button>
-     </div>
-     <p class="lede">Ya da bitir: skorunu yüksek skor listesine kaydetmek için adını yaz.</p>
+     ${nameEntryHTML()}`);
+  bindNameEntry();
+}
+/* Oyun sonu ad girişi: hem can bitince hem kür tamamlanınca. Skorlar ödül
+   ölçütü olduğu için kürü bitiren oyuncunun skoru da kaydedilmeli (eskiden
+   zafer ekranında yalnızca "yeniden oyna" vardı, en yüksek skorlar
+   kayboluyordu). */
+function nameEntryHTML(){
+  return `<p class="lede">Skorunu yüksek skor listesine kaydetmek için adını yaz.</p>
      <div class="acts">
        <input id="nameInput" class="nameInput" maxlength="12" placeholder="ADIN">
        <button class="cta" data-a="submitscore">KAYDET</button>
-     </div>`);
+     </div>`;
+}
+function bindNameEntry(){
   setTimeout(()=>{
     const inp = document.getElementById('nameInput');
     if(!inp) return;
@@ -2666,9 +2726,6 @@ function doAction(a){
   else if(a === 'go'){ Cine.close(); startLevel(); }
   // GOAL-037: yeni güne bir can desteğiyle başlanıyor (en fazla 3)
   else if(a === 'next'){ G.levelIdx++; G.lives = Math.min(3, G.lives + 1); introLevel(); }
-  // GOAL-037: oyun bitince kür baştan başlamak zorunda değil — skor o günün
-  // başındaki değere dönüp aynı gün yeniden deneniyor
-  else if(a === 'retryday'){ G.score = G.dayStartScore || 0; G.lives = 3; startLevel(); }
   else if(a === 'howto') showHowTo();
   else if(a === 'retry') startLevel();
   else if(a === 'resume'){ hidePanel(); G.state = 'play'; }
@@ -2702,10 +2759,18 @@ $('btnPause').onclick = () => togglePause();
 // oyun-menüsü hissi veren .menuStack/.menuBtn (ana menüyle aynı bileşen).
 // GOAL-020: ayarlardan geri dönebilmek için ayrı fonksiyon.
 function showPausePanel(){
+  /* Oyun içinde açılmış bilgiler tam metinle: telefonda şeritte sayfalanarak
+     geçen bir bilgiyi oyuncu burada sakince okuyabiliyor. */
+  const seen = (FACTS[G.level.day-1] || []).slice(0, Info.shown + 1).reverse();
+  const learned = seen.length ? `<div class="learned" style="--rc:${ANAT_COL[G.level.region].join(',')}">
+       <div class="lk">BUGÜNKÜ BİLGİLER · ${escapeHtml(G.level.regionName.toLocaleUpperCase('tr-TR'))}</div>
+       <ul>${seen.map(f => `<li><b>${escapeHtml(f.t)}</b><p>${escapeHtml(f.b)}</p></li>`).join('')}</ul>
+     </div>` : '';
   showPanel(
     `<div class="kicker">DURAKLATILDI</div>
      <div class="title">Gün ${G.level.day}</div>
      <p class="lede">${G.level.name} · alanın %${Math.floor(G.pct*100)}’i temizlendi, hedef %${Math.round(G.level.target*100)}.</p>
+     ${learned}
      <div class="menuStack">
        <button class="menuBtn primary" data-a="resume">DEVAM ET</button>
        <button class="menuBtn" data-a="settingspause">AYARLAR</button>
@@ -2847,9 +2912,9 @@ function startLevel(){
   const kinds = [PU.SPEED,PU.FREEZE,PU.LASER,PU.BOMB,PU.DOSE];
   for(let i=0;i<L.pu;i++){
     const k = kinds[i%kinds.length];
-    const s = new PIXI.Sprite(TEX.pu[k]); s.anchor.set(.5); s.width = s.height = 34;
+    const s = new PIXI.Sprite(TEX.pu[k]); s.anchor.set(.5); s.width = s.height = puW;
     const g = new PIXI.Sprite(TEX.glow);
-    g.anchor.set(.5); g.width = g.height = 80; g.blendMode = BLEND_ADD; g.alpha = .3;
+    g.anchor.set(.5); g.width = g.height = 2.35*puW; g.blendMode = BLEND_ADD; g.alpha = .3;
     g.tint = parseInt(PU_META[k].color.slice(1),16);
     layerEnt.addChild(g, s);
     const pc = randomCavityCell(1);   // GOAL-015
@@ -3034,7 +3099,20 @@ const Cine = {
   active:false, ended:false, t0:0, raf:0, L:null, idx:0, cues:0,
   path:null, pathLen:0, dpr:1, W:0, H:0, s0:1, o0:[0,0],
   END:3.9,
+  /* Yüz haritasında sinüs adları ancak ~0,4 sn tam görünüyordu; okunmadan
+     yakınlaşma başlıyordu. İlaç hedefe vardığı anda (HOLD_AT) sahne HOLD
+     saniye duruyor, etiketler bu sürede tam okunur. Sahnenin geri kalan
+     zamanlaması değişmedi: frame() gerçek süreyi bu duraklamayla eşliyor. */
+  HOLD_AT:1.35, HOLD:1.2,
+  sceneT(raw){ return raw < this.HOLD_AT ? raw : Math.max(this.HOLD_AT, raw - this.HOLD); },
+  curtain(){
+    this.el.classList.add('on','prep'); this.el.classList.remove('ended');
+    this.el.style.background = '#04090d';
+    this.title.classList.remove('on','rest'); this.card.classList.remove('on');
+    document.body.classList.add('cineOn');
+  },
   play(L, idx){
+    this.el.classList.remove('prep');
     this.L = L; this.idx = idx; this.cues = 0;
     this.active = true; this.ended = false;
     this.el.classList.add('on'); this.el.classList.remove('ended');
@@ -3050,7 +3128,7 @@ const Cine = {
     this.buildMask(L);
     this.resize();
     this.t0 = performance.now();
-    if(matchMedia('(prefers-reduced-motion: reduce)').matches) this.t0 -= this.END*1000;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches) this.t0 -= (this.END + this.HOLD)*1000;
     cancelAnimationFrame(this.raf);
     const step = () => { if(!this.active) return; this.frame(); if(!this.ended) this.raf = requestAnimationFrame(step); };
     this.raf = requestAnimationFrame(step);
@@ -3165,17 +3243,27 @@ const Cine = {
      alçalıp tahtanın daha azını örtüyor. Ekran genişse iki sütun. */
   placeCard(){
     const cd = this.card, fr = scrFrame, side = fr.x0;
-    cd.classList.remove('side','bottom','wide','lean');
-    cd.style.width = cd.style.left = cd.style.top = '';
+    cd.classList.remove('side','bottom','wide','lean','scroll');
+    cd.style.width = cd.style.left = cd.style.top = cd.style.maxHeight = '';
+    /* Kısa ekranda (yatay telefon, 320 px telefon) kart ekrana sığmıyor,
+       BAŞLA ekranın dışında kalıyordu — dokunmatikte günü başlatmanın tek
+       yolu o düğme. Sığmıyorsa kart ekran yüksekliğiyle sınırlanıyor, içi
+       kaydırılıyor, BAŞLA altta yapışık kalıyor (.scroll). */
+    const fitH = () => {
+      const room = this.H - 32 - safeB;
+      if(cd.offsetHeight > room){ cd.classList.add('scroll'); cd.style.maxHeight = room + 'px'; cd.scrollTop = 0; }
+    };
     if(side >= 300){
       cd.classList.add('side');
       const w = Math.min(430, side - 36);
       cd.style.width = w + 'px';
       cd.style.left = Math.max(16, (side - w)/2) + 'px';
+      fitH();
       cd.style.top = Math.max(16, Math.min(this.H - cd.offsetHeight - 16, (fr.y0+fr.y1)/2 - cd.offsetHeight/2)) + 'px';
     } else {
       cd.classList.add('bottom','lean');
       if(this.W >= 720) cd.classList.add('wide');
+      fitH();
     }
     this.lean = !cd.classList.contains('side');
   },
@@ -3239,7 +3327,7 @@ const Cine = {
      etiketler; dar ekranda (telefon) yüzün altında renk anahtarı. Yakınlaşma
      başlamadan sönüyorlar — dalışta yalnızca hedef ve başlık kalsın. */
   drawLabels(c, s, o, t){
-    const a = sstep(.3, .8, t) * (1 - sstep(1.2, 1.6, t));
+    const a = sstep(.3, .8, t) * (1 - sstep(1.35, 1.7, t));   // HOLD boyunca tam görünür
     if(a <= .003) return;
     const dpr = this.dpr, W = this.W, H = this.H, cur = DAY_REGION[this.idx];
     const kinds = ['frontal','ethmoid','nasal','maxillary'];
@@ -3283,10 +3371,13 @@ const Cine = {
   },
   skip(){
     if(!this.active || this.ended) return;
-    this.t0 = performance.now() - this.END*1000;
+    this.t0 = performance.now() - (this.END + this.HOLD)*1000;
   },
   close(){
-    if(!this.active) return;
+    if(!this.active){   // yalnızca perde açıksa (hazırlık sürerken) onu da kaldır
+      if(this.el.classList.contains('prep')){ this.el.classList.remove('on','prep'); this.el.style.background = ''; document.body.classList.remove('cineOn'); }
+      return;
+    }
     this.active = false; this.ended = true;
     cancelAnimationFrame(this.raf);
     this.el.classList.remove('on');
@@ -3294,7 +3385,7 @@ const Cine = {
     document.body.classList.remove('cineOn');
   },
   frame(){
-    const t = (performance.now() - this.t0)/1000, c = this.ctx, dpr = this.dpr, W = this.W, H = this.H;
+    const t = this.sceneT((performance.now() - this.t0)/1000), c = this.ctx, dpr = this.dpr, W = this.W, H = this.H;
     const L = this.L, idx = this.idx, region = DAY_REGION[idx], sg = sideSign(idx);
     c.setTransform(1,0,0,1,0,0);
     c.clearRect(0,0,this.cv.width,this.cv.height);
@@ -3314,7 +3405,8 @@ const Cine = {
       return;
     }
     // ses işaretleri — sahne akışının iki anı
-    if(this.cues === 0 && t >= 1.35){ this.cues = 1; Sound.air(1.3, 260, 1300, .12, .8); }
+    if(this.cues === 0 && t > this.HOLD_AT){   // duraklama bitince, yakınlaşmayla birlikte
+      this.cues = 1; Sound.air(1.3, 260, 1300, .12, .8); }
     if(this.cues === 1 && t >= 2.5){ this.cues = 2; Sound.tone(392,.5,'sine',.06); setTimeout(()=>Sound.tone(523,.6,'sine',.05), 120); }
 
     const bgA = 1 - .5*sstep(3.2, 3.9, t);
@@ -3416,7 +3508,8 @@ const Cine = {
       }
       c.globalAlpha = 1;
     }
-    this.title.classList.toggle('on', t >= 1.5 && (t < 3.5 || this.lean));
+    // başlık, etiketler sönünce geliyor: ikisi aynı anda yüzün üstünde karışmasın
+    this.title.classList.toggle('on', t >= 1.7 && (t < 3.5 || this.lean));
   }
 };
 Cine.skipBtn.addEventListener('click', e => { e.stopPropagation(); Sound.init(); Sound.resume(); Cine.skip(); });
@@ -3450,6 +3543,8 @@ const Info = {
   reset(L){
     this.facts = FACTS[L.day-1] || [];
     this.shown = -1; this.want = -1; this.lastT = -99; this.from = null;
+    this.pages = 1; this.pagesSeen = true;   // önceki günün sayfalaması ilk bilgiyi bekletmesin
+    this.cur = null;
     // "BİLGİ" etiketini süzülen işaret ve renk taşıyor; dar şeritte bölge adı kesilmesin
     this.kick.textContent = L.regionName.toLocaleUpperCase('tr-TR');
     // bölgenin haritadaki rengi ve silüeti: şerit neyle ilgili, bir bakışta
@@ -3499,15 +3594,16 @@ const Info = {
     ], { duration:1500, easing:'cubic-bezier(.45,0,.25,1)' });
   },
   tick(){
-    if(this.want > this.shown && G.time - this.lastT >= (this.shown < 0 ? 0 : this.MIN_DWELL)) this.show(this.shown+1);
+    // sayfalı metinde yeni bilgi, eldeki bilginin bütün sayfaları bir kez gösterilmeden gelmiyor
+    if(this.want > this.shown && G.time - this.lastT >= (this.shown < 0 ? 0 : this.MIN_DWELL) && this.pagesSeen) this.show(this.shown+1);
+    if(this.pages > 1 && this.vis && G.time - this.pageT >= this.N*2.6 + 1) this.nextPage();
     this.setVis(this.shown >= 0 && (G.state === 'play' || G.state === 'paused'));
   },
   show(i){
     const f = this.facts[i]; if(!f) return;
     this.shown = i; this.lastT = G.time;
     const fill = () => {
-      this.body.querySelector('b').textContent = f.t;
-      this.body.querySelector('p').textContent = f.b;
+      this.cur = f;               // metni fit() → paginate() yazıyor: kartın hâline göre uzun ya da kısa
       this.idxEl.querySelectorAll('i').forEach((d, k) => d.classList.toggle('on', k <= i));
       this.body.classList.remove('swap');
       this.fit();
@@ -3518,12 +3614,77 @@ const Info = {
   },
   /* Şerit kendisine ayrılan yüksekliğe (avail, bkz. placeInfoRail) sığmıyorsa
      gövde iki satıra kırpılıyor; tamamı gün sonunda okunuyor. */
-  avail:0, autoCompact:false,
+  avail:0, autoCls:null,
   fit(){
-    if(this.autoCompact){ this.el.classList.remove('compact'); this.autoCompact = false; }
-    if(this.avail > 0 && !this.el.classList.contains('compact') && this.el.offsetHeight > this.avail){
-      this.el.classList.add('compact'); this.autoCompact = true;
+    const el = this.el;
+    if(this.autoCls){ el.classList.remove(this.autoCls); this.autoCls = null; }
+    this.paginate();
+    if(this.avail <= 0 || el.classList.contains('gone')) return;
+    // sırayla: tam → iki satır → tek satırlık şerit → hiç (tahtaya taşmaktansa)
+    for(const c of ['compact', 'slim', 'gone']){
+      // sayfalı iki satırlık kart yerine, sığıyorsa sayfasız şerit yeğleniyor
+      if(el.offsetHeight <= this.avail && (!el.classList.contains('paged') || c === 'gone')) return;
+      if(el.classList.contains(c)) continue;
+      if(this.autoCls) el.classList.remove(this.autoCls);
+      el.classList.add(c); this.autoCls = c;
+      this.paginate();
     }
+  },
+  /* Telefonda tam karta yer yokken kart iki satırlık bir hâle iniyor ve
+     bilginin kısa metnini (k) gösteriyor: iki satırlı kartta başlık ayrı,
+     şeritte (slim) başlık metnin başında kalın — ikisi de bir bakışta
+     okunuyor. Çok dar bir ekranda kısa metin bile iki satıra sığmazsa
+     kesilmiyor, sayfalanıyor: her sayfa N·2,6 + 1 sn duruyor, yumuşak bir
+     solmayla sonrakine geçiyor, sona gelince başa dönüyor. */
+  cur:null, pages:1, page:0, N:0, lh:20, pageT:0, pagesSeen:true, pageSwapT:0,
+  paginate(){
+    const el = this.el, p = this.body.querySelector('p'), sp = p.firstElementChild;
+    clearTimeout(this.pageSwapT);
+    this.page = 0; sp.style.transform = ''; sp.style.opacity = '';
+    const slim = el.classList.contains('slim');
+    let N = (slim || el.classList.contains('compact')) ? 2 : 0;
+    const f = this.cur;
+    if(f){
+      const txt = N && f.k ? f.k : f.b;
+      this.body.querySelector('b').textContent = f.t;
+      if(slim) sp.innerHTML = '<strong>' + escapeHtml(f.t) + '</strong> ' + escapeHtml(txt);
+      else sp.textContent = txt;
+    }
+    el.classList.remove('paged');
+    this.N = N; this.pages = 1; this.pagesSeen = true; this.pageT = G.time;
+    if(!N || el.classList.contains('gone')){ p.style.height = ''; this.idxPage(); return; }
+    const lh = parseFloat(getComputedStyle(p).lineHeight) || 20;
+    this.lh = lh;
+    p.style.height = (N*lh).toFixed(2) + 'px';
+    /* Kartın altında boş yer varsa pencere o kadar satır uzuyor (dar yan
+       çubukta kısa metin 3-4 satır tutuyor; sayfalamaya gerek kalmıyor). */
+    const total = Math.round(sp.offsetHeight / lh);
+    if(this.avail > 0 && total > N){
+      N = Math.min(total, N + Math.max(0, Math.floor((this.avail - el.offsetHeight) / lh)));
+      this.N = N; p.style.height = (N*lh).toFixed(2) + 'px';
+    }
+    const count = () => Math.max(1, Math.ceil(Math.round(sp.offsetHeight / lh) / N));
+    if(count() > 1){ el.classList.add('paged'); this.pages = count(); }   // sayfa sayacına yer açınca yeniden say
+    this.pagesSeen = this.pages <= 1;
+    this.idxPage();
+  },
+  nextPage(){
+    const sp = this.body.querySelector('p span');
+    const k = (this.page + 1) % this.pages;
+    if(k === 0) this.pagesSeen = true;
+    this.page = k; this.pageT = G.time;
+    sp.style.opacity = '0';
+    clearTimeout(this.pageSwapT);
+    this.pageSwapT = setTimeout(() => {
+      sp.style.transform = 'translateY(' + (-k*this.N*this.lh).toFixed(2) + 'px)';
+      sp.style.opacity = '';
+      this.idxPage();
+    }, 420);
+  },
+  // metnin devamı olduğu, sağ alttaki küçük "1/3" ile belli
+  idxPage(){
+    const pg = this.body.querySelector('em');
+    pg.textContent = this.pages > 1 ? (this.page + 1) + '/' + this.pages : '';
   },
   setVis(v){
     if(v === this.vis) return;
@@ -3576,20 +3737,27 @@ const Guide = {
       const a = clamp(this.tagT, 0, 1).toFixed(2), sc = root.scale.x;
       /* Çakışan etiket atlanıyor (küçük ekranda mikroplar üst üste binip
          oyuncunun etiketini örtüyordu). Öncelik: sen, bakteri, mikroplar. */
-      const taken = [];
+      const taken = [], vw = innerWidth, vh = innerHeight;   // döngüden önce: stil yazarken okumak her etikette düzeni yeniden hesaplatıyordu
       const put = (gx, gy, off, text, cls, w) => {
         const p = this.toScreen(gx, gy), x = p[0], y = p[1] - off, hw = w/2 + 4;
         if(taken.some(r => Math.abs(r[0] - x) < r[2] + hw && Math.abs(r[1] - y) < 26)) return;
+        if(x < 0 || y < 0 || x > vw || y > vh) return;
         taken.push([x, y, hw]);
         const el = this.tag(n++, text, cls);
         el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%,-100%)';
         el.style.opacity = a;
       };
       // rehber balonu açıkken "sen" etiketi gereksiz: balon zaten onu söylüyor
-      if(this.step < 0) put(G.px + .5, G.py + .5, 22*sc + 10, 'SEN · İLAÇ', 'me', 92);
-      else taken.push([this.toScreen(G.px + .5, G.py + .5)[0], this.toScreen(G.px + .5, G.py + .5)[1] - 30, 60]);
+      const meOff = playerW*.75*sc + 6;              // kalkan halkasının hemen üstü
+      if(this.step < 0) put(G.px + .5, G.py + .5, meOff, 'SEN · İLAÇ', 'me', 92);
+      else taken.push([this.toScreen(G.px + .5, G.py + .5)[0], this.toScreen(G.px + .5, G.py + .5)[1] - meOff, 60]);
       for(const b of G.bosses) put(b.x, b.y, b.r*CS*sc + 6, 'BAKTERİ', 'foe', 74);
       for(const m of G.minions) put(m.x, m.y, 15*sc + 4, 'MİKROP', 'foe small', 62);
+      // güçlendiriciler en son: yer kalırsa ne işe yaradıkları da yazsın
+      for(const p of G.pus) if(!p.collected && cells[p.y*GW+p.x] === EMPTY){
+        const m = PU_META[p.k];
+        put(p.x + .5, p.y + .5, puW/2*sc + 4, m.letter + ' ' + m.tag, 'small pu' + p.k, m.tag.length*9 + 34);
+      }
     }
     for(let i=n;i<this.pool.length;i++) if(this.pool[i].style.opacity !== '0') this.pool[i].style.opacity = '0';
     // rehber
@@ -3603,8 +3771,9 @@ const Guide = {
     const p = this.toScreen(G.px + .5, G.py + .5);
     const w = this.coach.offsetWidth || 260, h = this.coach.offsetHeight || 80;
     const x = clamp(p[0] - w/2, 10, innerWidth - w - 10);
-    const above = p[1] - 46*root.scale.x - h > 70;               // yer yoksa altına
-    const y = above ? p[1] - 46*root.scale.x - h : p[1] + 34*root.scale.x;
+    const ra = playerW*.75*root.scale.x;                        // kalkan halkasının yarıçapı, ekranda
+    const above = p[1] - ra - 16 - h > 70;                       // yer yoksa altına
+    const y = above ? p[1] - ra - 16 - h : p[1] + ra + 10;
     this.coach.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
     this.coach.classList.toggle('below', !above);
     this.coach.style.setProperty('--ax', clamp(p[0] - x, 18, w - 18).toFixed(1) + 'px');
@@ -3614,7 +3783,7 @@ const Guide = {
 Guide.init();
 /* Menüdeki "NASIL OYNANIR" ekranı — sahadaki gerçek görsellerle. */
 function showHowTo(){
-  const pu = PU_META.map(m => `<span class="howPu" style="--c:${m.color}"><i>${m.letter}</i>${escapeHtml(m.label)}</span>`).join('');
+  const pu = PU_META.map(m => `<span class="howPu" style="--c:${m.color}"><i>${m.letter}</i><b>${escapeHtml(m.tag)}</b>${escapeHtml(m.label)}</span>`).join('');
   showMenuScreen(
     `<div class="menuBrand"><div class="kicker">NASIL OYNANIR</div><div class="title">Kim kimdir?</div></div>
      <div class="howList">
@@ -3646,13 +3815,22 @@ function introLevel(){
   G.state = 'intro';
   // GOAL-020: giriş sakin menü müziğiyle; ritim BAŞLA'ya basınca giriyor
   Sound.scene('menu');
+  /* Kesitin hazırlığı (boşluk, doku, duvar boyaları) zayıf telefonda 1-2 sn
+     sürüyor ve o sırada ekran donuyordu: dokunuşa hiçbir karşılık yok gibi
+     görünüyordu. Önce perde ve "Hazırlanıyor…" çiziliyor, ağır iş bir kare
+     sonra. tok: arada ikinci kez çağrılırsa eskisi iptal. */
+  Cine.curtain();
+  const tok = ++introTok;
+  requestAnimationFrame(() => requestAnimationFrame(() => { if(tok === introTok) introPrepared(L); }));
+}
+let introTok = 0;
+function introPrepared(L){
   /* GOAL-031: brifing paneli yerine giriş sahnesi (bkz. Cine). Sahne tahtanın
      gerçek yerine indiği için bugünün kesiti sahneden ÖNCE kuruluyor: perde
      kalktığında arkada hazır, hastalıklı tahta duruyor. startLevel aynı
      hazırlığı yeniden yapıyor; ikisi de idempotent. Günün bilgi görseli
      (GOAL-019) ve kısa kural metni sahnenin künye kartında. */
   G.level = L;
-  G.dayStartScore = G.score;   // GOAL-037: "günü tekrarla" buraya döner
   clearEntities(); prepareLevel(G.levelIdx); resetGrid(); rasterRegion(0,0,GW,GH);
   const st = playerStart();
   G.px = st.x; G.py = st.y; G.dir = 0; G.frac = 0; G.drawing = false; G.trail = []; G.corners = [];
@@ -3671,7 +3849,8 @@ function winGame(){
        <div><span>TOPLAM SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
        <div><span>KALAN CAN</span><b>${G.lives}</b></div>
      </div>
-     <div class="acts"><button class="cta" data-a="restart">YENİDEN OYNA</button></div>`);
+     ${nameEntryHTML()}`);
+  bindNameEntry();
   Sound.clear();
 }
 
@@ -4066,7 +4245,7 @@ function levelClear(){
        <div><span>TOPLAM SKOR</span><b>${G.score.toLocaleString('tr-TR')}</b></div>
      </div>
      ${learned}
-     <div class="acts"><button class="cta" data-a="next">${last?'SON GÜNE GEÇ':'ERTESİ GÜN'}</button></div>`); });
+     <div class="acts"><button class="cta" data-a="next">${last ? 'KÜRÜ TAMAMLA' : G.levelIdx === LEVELS.length-2 ? 'SON GÜNE GEÇ' : 'ERTESİ GÜN'}</button></div>`); });
 }
 /* Gün sonu açılışı: hedefe ulaşılınca kalan hastalıklı doku dipten tepeye
    (nefesin yönünde) eriyor, düşmanlar sönüyor ve açılan resmin tamamı
@@ -4305,9 +4484,9 @@ function render(dt){
   playerSprite.rotation = Math.sin(t*1.1)*.10;
   const blink = G.invuln > 0 ? (Math.sin(t*30) > 0 ? .25 : 1) : 1;
   playerSprite.alpha = blink;
-  { const pw = 34 + Math.sin(t*4.2)*1.4; playerSprite.width = pw; playerSprite.height = pw * PLAYER_AR; }
+  { const pw = playerW*(1 + Math.sin(t*4.2)*.04); playerSprite.width = pw; playerSprite.height = pw * PLAYER_AR; }
   playerGlow.alpha = (.34 + Math.sin(t*4.2)*.12) * blink * (G.drawing ? 1.5 : 1);
-  playerGlow.width = playerGlow.height = 96 + Math.sin(t*4.2)*12;
+  playerGlow.width = playerGlow.height = playerW*(2.8 + Math.sin(t*4.2)*.35);
   playerLight.alpha = (.14 + Math.sin(t*2.1)*.03) * (G.drawing ? 1.6 : 1);
   drawShield(pxp, pyp, t);
   // iyileşmiş dokuda yukarı süzülen hava (nefes anında parlıyor)
@@ -4338,14 +4517,15 @@ function render(dt){
       const k = clamp(p.collectT/0.35, 0, 1);
       p.s.x = p.g.x = (p.x+.5)*CS; p.s.y = p.g.y = (p.y+.5)*CS;
       p.s.visible = p.g.visible = true;
-      p.s.width = p.s.height = 34 * (1 + k*0.9);
-      p.g.width = p.g.height = 80 * (1 + k*1.4);
+      p.s.width = p.s.height = puW * (1 + k*0.9);
+      p.g.width = p.g.height = 2.35*puW * (1 + k*1.4);
       p.s.alpha = p.g.alpha = 1 - k;
       if(p.collectT >= 0.35){ p.s.destroy(); p.g.destroy(); G.pus.splice(i,1); }
       continue;
     }
-    const yy = (p.y+.5)*CS + Math.sin(p.t*2.1)*3.5;
+    const yy = (p.y+.5)*CS + Math.sin(p.t*2.1)*3.5*puW/PU_SIZE;
     p.s.x = p.g.x = (p.x+.5)*CS; p.s.y = p.g.y = yy;
+    p.s.width = p.s.height = puW; p.g.width = p.g.height = 2.35*puW;
     p.s.rotation = Math.sin(p.t*1.3)*.14;
     const vis = cells[p.y*GW+p.x] === EMPTY;
     p.s.visible = p.g.visible = vis;
@@ -4421,6 +4601,14 @@ const isTouch = matchMedia('(pointer:coarse)').matches;
    SES/DUR onun altında), tahta ekranın bütün yüksekliğini kullanıyor. Dikeyde
    HUD üstte kalıyor, tahta enin tamamını kullanıyor, alt bant baş parmağın. */
 let hudSide = false, sideW = 0;
+/* iPhone'un alt çubuğu (safe-area-inset-bottom). viewport-fit=cover olduğu
+   için tuval oraya kadar uzanıyor; alt bant bu payın üstünde kalmalı, yoksa
+   bilgi kartına yer kalmıyor ve baş parmak sistemin ana ekran hareketine
+   değiyor. */
+const safeProbe = document.createElement('div');
+safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none';
+document.body.appendChild(safeProbe);
+let safeB = 0;
 function layout(pass){
   const w = window.innerWidth, h = window.innerHeight;
   app.renderer.resize(w,h);
@@ -4430,7 +4618,8 @@ function layout(pass){
   document.body.classList.toggle('hudSide', hudSide);
   document.documentElement.style.setProperty('--sideW', sideW + 'px');
   const top = hudSide ? 10 : (hudEl ? hudEl.offsetHeight : 110) + 8;
-  const bottom = hudSide ? 10 : (isTouch ? 74 : 44);
+  safeB = safeProbe.offsetHeight || 0;
+  const bottom = hudSide ? 10 : (isTouch ? 80 + safeB : 44);   // alt bant: baş parmak + bilgi şeridi
   const left = sideW;
   const rightPad = (hudSide && h <= 520) ? 138 : 0;   // kısa yatayda SES/DUR sağda, tahtaya binmesin
   // GOAL-022: dokunmatikte yan boşluk daraltıldı — telefonda her piksel alan.
@@ -4461,6 +4650,8 @@ function layout(pass){
      yazıya dönüşüyorlardı. Ekrandaki boyutları sabit kalsın diye ters
      ölçekliyoruz. */
   uiScale = clamp(.85/Math.max(.0001,s), 1, 2.6);
+  { const k = isTouch ? 'touch' : 'desk', fit = (base, r) => clamp(base*s, r[0], r[1]) / Math.max(.0001, s);
+    playerW = fit(PLAYER_SIZE, PLAYER_PX[k]); puW = fit(PU_SIZE, PU_PX[k]); }
   frame = { x0:fx0*CS, y0:fy0*CS, x1:fx1*CS, y1:fy1*CS };
 
   /* Toast (pembe uyarı yazısı) artık ekranın %26'sına değil sahanın üst
@@ -4482,6 +4673,16 @@ function layout(pass){
   UI.hudInner.style.maxWidth = hudSide ? 'none' : clamp(Math.min(PFW*s, w - (isTouch ? 24 : 32)), 320, 1120) + 'px';
   if(!pass && !hudSide && hudEl && Math.abs(hudEl.offsetHeight + 8 - top) > 1){ layout(1); return; }
 
+  /* Dikeyde SES/DUR, HUD'un üst satırının sağ ucuna oturuyor (satır CSS'te
+     onlara yer ayırıyor). Yatayda CSS'teki yerlerine dönüyorlar. */
+  const tools = $('tools'), topRow = $('topRow');
+  if(!hudSide && topRow){
+    const r = topRow.getBoundingClientRect();
+    tools.style.top = Math.round(r.top + (r.height - tools.offsetHeight)/2) + 'px';
+    tools.style.left = Math.round(r.right - tools.offsetWidth) + 'px';
+    tools.style.right = tools.style.bottom = 'auto';
+  } else tools.style.top = tools.style.left = tools.style.right = tools.style.bottom = '';
+
   scrField = { x:root.x, y:root.y, s:s };
   scrFrame = { x0:root.x + fx0*CS*s, y0:root.y + fy0*CS*s, x1:root.x + fx1*CS*s, y1:root.y + fy1*CS*s };
   placeInfoRail(w, h);
@@ -4494,15 +4695,16 @@ function layout(pass){
 function placeInfoRail(w, h){
   const el = Info.el, fr = scrFrame, st = el.style;
   // Ölçü kadraj: dışındaki kemik payı oynanmayan alan, şerit oraya taşabilir.
-  const left = fr.x0, below = h - fr.y1;
-  el.classList.remove('compact','gone');
-  Info.avail = 0; Info.autoCompact = false;
+  const left = fr.x0;
+  el.classList.remove('compact','slim','narrow','gone');
+  Info.avail = 0; Info.autoCls = null;
   st.top = st.bottom = st.left = st.right = st.width = 'auto';
   if(hudSide){
     const hudB = (document.getElementById('hud').querySelector('.hudInner').getBoundingClientRect().bottom) + 14;
     const toolsLeft = h > 520;                          // kısa ekranda SES/DUR sağ altta
     const room = h - (toolsLeft ? 80 : 14) - hudB;
     st.left = '16px'; st.width = (sideW - 32) + 'px'; st.bottom = (toolsLeft ? 78 : 12) + 'px';
+    if(sideW - 32 < 250) el.classList.add('narrow');   // dar çubukta bölge adı kesilmesin: ikon ve renk yetiyor
     if(room < 96) el.classList.add('gone');
     else if(room < 150) el.classList.add('compact');
     Info.avail = room;
@@ -4513,18 +4715,23 @@ function placeInfoRail(w, h){
     st.width = rw + 'px';
     st.left = Math.max(16, left - rw - 28) + 'px';
     st.bottom = Math.max(16, h - fr.y1) + 'px';
-  } else if(below >= 96){
-    st.top = (fr.y1 + 12) + 'px';
-    st.left = Math.max(12, fr.x0) + 'px';
-    // sağ alttaki SES/DUR düğmelerine taşmasın
-    const r = Math.max(12, w - fr.x1);
-    st.right = (below < 200 ? Math.max(r, 150) : r) + 'px';
-    Info.avail = below - 12 - 14;
-  } else {
-    el.classList.add('compact');
-    st.left = '12px'; st.right = '150px';
-    st.bottom = 'calc(14px + env(safe-area-inset-bottom))';
+    return;
   }
+  /* Dikey telefon: kart tahtanın altındaki bantta, HUD ile aynı hizada.
+     Tahtaya hiçbir zaman binmiyor: bandın yüksekliği boşluğun gerçek alt
+     kenarından ekranın (alt çubuk payı hariç) altına kadar. Kart sığmazsa
+     fit() önce iki satıra (compact), sonra tek satırlık şeride (slim)
+     indiriyor; o da sığmazsa göstermiyor — bilgiler gün sonunda tam hâliyle
+     okunuyor. */
+  const hr = UI.hudInner.getBoundingClientRect();
+  const cavBot = scrField.y + cavBB.y1*CS*scrField.s;
+  // oyuncu tahtanın dibinde başlıyor: kalkan halkası (yarıçap ~.72·playerW) şeride değmesin
+  const top = Math.round(cavBot + Math.max(10, playerW*.72*scrField.s + 4));
+  st.top = top + 'px';
+  st.left = Math.max(12, hr.left) + 'px';
+  st.right = Math.max(12, w - hr.right) + 'px';
+  Info.avail = h - safeB - 8 - top;
+  if(Info.avail < 44) el.classList.add('gone');
 }
 addEventListener('resize', layout);
 addEventListener('orientationchange', ()=> setTimeout(layout,180));
@@ -4533,9 +4740,42 @@ addEventListener('orientationchange', ()=> setTimeout(layout,180));
    17. ANA DÖNGÜ
    ========================================================================= */
 let last = performance.now(), fpsAcc = 0, fpsN = 0;
+/* UYARLAMALI KALİTE. Zayıf ekran kartlı telefonlarda tam ekran ışıma
+   bulanıklığı ve 2x çözünürlük kare hızını düşürebilir. Oyun sürerken kare
+   hızı izleniyor; 4 sn boyunca ortalama 42'nin altında kalırsa kalite bir
+   kademe iniyor (en fazla iki). Geri çıkmıyor — kalite gidip gelmesin — ve
+   cihazda hatırlanıyor, bir sonraki açılışta doğrudan o kademeden başlanıyor.
+     1: çözünürlük en fazla 1,5x, ışıma bulanıklığı ve tanecik kapalı
+     2: çözünürlük 1x, iyileşmiş dokudaki süzülen zerreler kapalı */
+const QUALITY_KEY = 'nasodren_quality_v1';
+const Quality = {
+  level:0, winT:0, winN:0, holdT:0,
+  init(){ let q = 0; try{ q = parseInt(localStorage.getItem(QUALITY_KEY), 10) || 0; }catch(e){} this.apply(clamp(q, 0, 2)); },
+  apply(q){
+    this.level = q;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const res = q >= 2 ? 1 : q >= 1 ? Math.min(dpr, 1.5) : dpr;
+    if(app.renderer.resolution !== res){ app.renderer.resolution = res; app.renderer.resize(window.innerWidth, window.innerHeight); }
+    if(q >= 1){ rimBloom.filters = null; rimBloom.alpha = .3; grainSprite.visible = false; }
+    if(q >= 2){ healLive.visible = false; }
+  },
+  tick(realDt){
+    if(this.level >= 2 || G.state !== 'play' || document.hidden || realDt > .5){ this.winT = this.winN = 0; return; }
+    if(this.holdT > 0){ this.holdT -= realDt; return; }   // değişiklikten sonra yerleşsin
+    this.winT += realDt; this.winN++;
+    if(this.winT < 4) return;
+    const fps = this.winN / this.winT; this.winT = this.winN = 0;
+    if(fps < 42){
+      this.apply(this.level + 1); this.holdT = 2;
+      try{ localStorage.setItem(QUALITY_KEY, String(this.level)); }catch(e){}
+    }
+  }
+};
+Quality.init();
 app.ticker.add(()=>{
   const now = performance.now();
   let dt = (now-last)/1000; last = now;
+  Quality.tick(dt);
   if(dt > 1/20) dt = 1/20;
 
   fpsAcc += dt; fpsN++;
@@ -4622,7 +4862,7 @@ showMainMenu();
 /* GOAL-037: denge testi kancası — yalnızca `npm run dev`te var, derlemeye girmez. */
 if(import.meta.env && import.meta.env.DEV){
   window.__nd = {
-    G, LEVELS, cells, cavity, GW, GH, EMPTY, FILL, TRAIL, DIRV, PLAYER_SPD,
+    G, LEVELS, cells, cavity, GW, GH, EMPTY, FILL, TRAIL, DIRV, PLAYER_SPD, Quality,
     step: dt => simStep(dt, true),
     setDir: d => { botDir = d; },
     begin(idx){ hideMenuScreen(); hidePanel(); G.levelIdx = idx; G.score = 0; G.lives = 3;

@@ -29,6 +29,9 @@
     --hudw:1120px;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  /* telefonda uzun basınca metin seçimi, büyüteç ve iOS'ta "görseli kaydet" menüsü çıkmasın */
+  body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  input{-webkit-user-select:text;user-select:text}
   html,body{height:100%;overflow:hidden;background:var(--ink);touch-action:none;overscroll-behavior:none;
     font-family:var(--face);color:var(--bone);-webkit-font-smoothing:antialiased}
   #app{position:fixed;inset:0}
@@ -482,6 +485,28 @@
   .tool{min-width:58px;height:50px;padding:0 12px;font-size:12.5px;letter-spacing:.04em;font-weight:700;
     color:var(--label);border:1px solid rgba(255,255,255,.18);background:rgba(8,17,25,.85);
     clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%)}
+  /* Dikeyde (HUD üstte) SES/DUR alt köşede değil HUD'un üst satırının sağında:
+     alt bant baş parmağın, tahtanın dibindeki oyuncunun üstüne binmesinler.
+     Yerini layout() veriyor; burada satır onlara yer ayırıyor. */
+  body:not(.hudSide) #topRow{padding-right:128px}
+  body:not(.hudSide) .tool{height:44px;min-width:52px}
+  /* dar telefonda (360px) bölge adı ve gün satırı sığsın diye düğmeler ve
+     gün noktaları biraz daralıyor */
+  @media (max-width:400px){
+    body:not(.hudSide) #topRow{padding-right:102px}
+    body:not(.hudSide) #tools{gap:6px}
+    body:not(.hudSide) .tool{min-width:44px;padding:0 8px}
+    #scoreBox{min-width:44px}
+    #dayLine{white-space:nowrap}
+    #dayDots{gap:4px}
+    #dayDots i{width:7px;height:7px}
+  }
+  /* 320-359 px'lik telefonlar (eski iPhone'lar, Galaxy Fold kapalı): bölge adı sığsın */
+  @media (max-width:359px){
+    body:not(.hudSide) #topRow{padding-right:94px}
+    body:not(.hudSide) .tool{min-width:40px;padding:0 7px}
+    #stageName{font-size:14.5px}
+  }
   .tool:hover{color:var(--bone);border-color:rgba(53,224,216,.45);background:rgba(12,28,36,.9)}
   .tool:active{transform:translateY(1px)}
   /* GOAL-022: dokunmatikte sahanın altında kalan bant baş parmağın yeri.
@@ -554,6 +579,11 @@
      yanda (geniş ekran) ya da altta (telefon) duruyor. Tuvali JS çiziyor. */
   #cine{position:fixed;inset:0;z-index:7;display:none;overflow:hidden;cursor:pointer}
   #cine.on{display:block}
+  /* güne girerken kesit hazırlanırken (zayıf telefonda 1-2 sn) dokunuşa anında karşılık */
+  #cine.prep::after{content:'Hazırlanıyor…';position:absolute;left:0;right:0;top:50%;text-align:center;
+    font-size:14px;font-weight:600;color:var(--muted);animation:prepIn .3s ease .25s both}
+  @keyframes prepIn{from{opacity:0}to{opacity:1}}
+  #cine.prep #cineSkip{display:none}   /* hazırlık sürerken atlanacak bir şey yok */
   #cine.ended{cursor:default}
   #cineCv{position:absolute;inset:0;width:100%;height:100%}
   #cineTitle{position:absolute;left:0;right:0;top:calc(7% + env(safe-area-inset-top));text-align:center;
@@ -606,6 +636,14 @@
   #cineCard .ccIcons i{font-style:normal;font-size:13px;line-height:1.35;color:#b8d0da}
   #cineCard .plateShot{margin:0 0 14px}
   #cineCard .acts{justify-content:space-between}
+  /* kısa ekran: kart ekran yüksekliğinde, içi kaydırılıyor, BAŞLA altta yapışık (bkz. Cine.placeCard) */
+  #cineCard.scroll{overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;padding-bottom:0}
+  /* BAŞLA .ccSide içinde; yapışıklık kartın tamamında çalışsın diye o sarmal kaldırılıyor */
+  #cineCard.side.scroll,#cineCard.bottom.scroll{padding-bottom:0}   /* .side'ın alt boşluğu yapışık düğmenin altından metin sızdırıyordu */
+  #cineCard.scroll .ccSide{display:contents}
+  #cineCard.scroll.wide{display:block}
+  #cineCard.scroll .acts{position:sticky;bottom:0;z-index:1;margin-top:4px;padding:12px 0 14px;
+    background:rgba(7,15,22,.98);box-shadow:0 -12px 14px -4px rgba(7,15,22,.95)}
   #cineCard .ccHint{font-size:12px;color:var(--muted);font-weight:600}
   #cineCard.side{padding:20px 20px 18px}
   #cineCard.side .ccT{font-size:clamp(24px,2.4vw,30px)}
@@ -659,7 +697,23 @@
   #irPop{--rc:53,224,216;position:absolute;left:0;top:0;z-index:4;pointer-events:none;opacity:0;white-space:nowrap;
     font-size:14px;font-weight:800;letter-spacing:.04em;padding:7px 11px 6px;border-radius:6px;
     color:#071017;background:rgb(var(--rc));box-shadow:0 0 22px rgba(var(--rc),.6)}
-  #infoRail.compact #irBody p{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  /* iki satırlı kart ve şerit: metin kesilmiyor, sayfalanıyor (bkz. Info.paginate).
+     p, N satırlık pencere; span içinde kayıyor, geçiş solarak. */
+  #irBody{position:relative}
+  #irBody p{overflow:hidden}
+  #irBody p span{display:block;transition:opacity .42s ease}
+  #irBody em{position:absolute;right:0;bottom:-2px;font-style:normal;font-size:11px;font-weight:700;
+    line-height:1;color:rgb(var(--rc));font-variant-numeric:tabular-nums}
+  #infoRail.paged #irBody p{padding-right:30px}   /* yalnızca sayfa sayacı varken */
+  /* Şerit: telefonda tahtanın altında tam karta yer yoksa. Bölge rengi
+     soldaki kenarda; kalın başlık ve bilginin kısa hâli iki satırda, tek
+     bakışta. Uzun hâli duraklatmada ve gün sonu kartında. */
+  #infoRail.slim{padding:7px 12px 8px}
+  #infoRail.slim .irHead,#infoRail.slim #irBody b{display:none}
+  #infoRail.slim #irBody p{font-size:14px;line-height:1.38}
+  #irBody p strong{font-weight:700;color:rgb(var(--rc))}   /* başlık bölge renginde: metinden ayrılsın */
+  /* dar yan çubukta bölge adı kesiliyordu ("BURUN B…"); ikon ve renk bölgeyi zaten söylüyor */
+  #infoRail.narrow #irKick{visibility:hidden}
   body.menuOn #infoRail{opacity:0}
   @media (max-width:680px){
     #cineTitle .k{font-size:12px}
@@ -684,6 +738,12 @@
   #tags .tag.me{color:#ffd1e6;border-color:rgba(255,77,157,.55)}
   #tags .tag.foe{color:#d9f7b0;border-color:rgba(157,245,138,.4)}
   #tags .tag.small{font-size:12px;padding:5px 7px 4px}
+  /* güçlendirici etiketleri kendi renginde (PU_META.color) */
+  #tags .tag.pu0{color:#35e0d8;border-color:rgba(53,224,216,.5)}
+  #tags .tag.pu1{color:#8fb9ff;border-color:rgba(143,185,255,.5)}
+  #tags .tag.pu2{color:#9ef05a;border-color:rgba(158,240,90,.5)}
+  #tags .tag.pu3{color:#ff7fb6;border-color:rgba(255,77,157,.5)}
+  #tags .tag.pu4{color:#ffc24a;border-color:rgba(255,194,74,.5)}
   #coach{position:absolute;left:0;top:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .35s;
     width:min(280px,calc(100vw - 20px));padding:12px 14px 13px;border-radius:10px;
     background:rgba(8,20,28,.94);border:1px solid rgba(53,224,216,.5);box-shadow:0 14px 30px -12px rgba(0,0,0,.8)}
@@ -715,6 +775,7 @@
   .howPu{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--bone);
     padding:5px 9px;border-radius:6px;border:1px solid var(--c);background:rgba(6,14,20,.6)}
   .howPu i{font-style:normal}
+  .howPu b{color:var(--c);font-weight:800}
   @media (max-width:680px){ .howRow{padding:10px 12px;gap:12px} .howRow p{font-size:13.5px} }
   /* ---------- GOAL-039: yatayda yan çubuk HUD ----------
      Aynı bileşenler, dikey sırayla: gün ve skor üstte, bölge adı ve ilerleme
@@ -813,7 +874,7 @@
   <div id="coach" role="status"><b></b><p></p></div>
   <div id="infoRail" aria-live="polite"><div class="irHead"><canvas id="irIcon" width="64" height="64" aria-hidden="true"></canvas>
     <span id="irKick">BİLGİ</span><span id="irIdx" aria-hidden="true"></span></div>
-    <div id="irBody"><b></b><p></p></div></div>
+    <div id="irBody"><b></b><p><span></span></p><em aria-hidden="true"></em></div></div>
   <div id="irPop" aria-hidden="true">+ BİLGİ</div>
   <div id="overlay"><div class="plateEdge"><div class="plate" id="plate"></div></div></div>
   <div id="cine" aria-label="Bölüm girişi">

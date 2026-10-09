@@ -7,10 +7,10 @@
  * Kullanım:
  *   npm run dev -- --port 5199            (ayrı bir terminalde)
  *   npm i --no-save playwright-core       (bir kez)
- *   node tools/denge-testi.mjs [deneme=8] [günler=1,2,...,8] [temkin=1] [ayar.json]
+ *   node tools/denge-testi.mjs [deneme=8] [günler=1,2,...,12] [temkin=1] [ayar.json]
  *
  * Tarayıcı: CHROME ortam değişkeni (varsayılan Windows Chrome yolu), adres: GAME_URL.
- * ayar.json verilirse (8 elemanlı dizi) o günlerin DAY_TUNE değerlerini kodu
+ * ayar.json verilirse (12 elemanlı dizi) o günlerin DAY_TUNE değerlerini kodu
  * değiştirmeden geçersiz kılar — yeni değer denemek için.
  *
  * Test oyuncusu klasik bir Volfield oyuncusu gibi davranır: kenardan içeri I,
@@ -26,7 +26,7 @@ try { ({ chromium } = await import('playwright-core')); }
 catch (e) { console.error('playwright-core bulunamadı: npm i --no-save playwright-core'); process.exit(1); }
 import fs from 'fs';
 const N = +(process.argv[2] || 8);
-const DAYS = (process.argv[3] || '1,2,3,4,5,6,7,8').split(',').map(Number);
+const DAYS = (process.argv[3] || '1,2,3,4,5,6,7,8,9,10,11,12').split(',').map(Number);
 const CAUTION = +(process.argv[4] || 1);
 const TUNE = process.argv[5] ? JSON.parse(fs.readFileSync(process.argv[5],"utf8")) : null;
 const b = await chromium.launch({ executablePath: process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });

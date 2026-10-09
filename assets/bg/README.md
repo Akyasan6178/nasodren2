@@ -8,15 +8,15 @@ gerekmez — dosyayı koy, `npm run dev` yeniden başlat, yeter.
 
 | Dosya adı | Nerede kullanılır |
 |---|---|
-| `day01.png` … `day08.png` | Yalnızca o günde |
-| `vestibule.png` | Gün 1-2 — Burun boşluğu |
-| `maxillary.png` | Gün 3-4 — Maksiller sinüs |
-| `ethmoid.png` | Gün 5-6 — Etmoid sinüs |
-| `frontal.png` | Gün 7-8 — Frontal sinüs |
+| `day01.png` … `day12.png` | Yalnızca o günde |
+| `vestibule.png` | Gün 1-3 — Burun boşluğu |
+| `maxillary.png` | Gün 4-6 — Maksiller sinüs |
+| `ethmoid.png` | Gün 7-9 — Etmoid sinüs |
+| `frontal.png` | Gün 10-12 — Frontal sinüs |
 
-Her bölgede (burun boşluğu dahil) iki gün sol ve sağ taraftır (iki
-taraf `sinuzit.jfif`teki gibi ayrı biçimde); arka plan görseli ikisinde de
-aynı kalır.
+Her bölgede (burun boşluğu dahil) üç gün vardır: sol taraf, sağ taraf (iki
+taraf `sinuzit.jfif`teki gibi ayrı biçimde) ve iki taraf birlikte; arka plan
+görseli üçünde de aynı kalır.
 
 Öncelik sırası: önce `dayNN.png` aranır, yoksa kesit arketipinin dosyası, o da
 yoksa oyun prosedürel arka planı çizer. Yani klasör boşken hiçbir şey bozulmaz.

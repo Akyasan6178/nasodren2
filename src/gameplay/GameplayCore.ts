@@ -212,10 +212,12 @@ const PLAYER_SIZE = 34, PU_SIZE = 32;
 const PLAYER_PX = { desk:[28, 36], touch:[24, 30] };   // ekranda en az / en çok
 const PU_PX     = { desk:[24, 30], touch:[21, 26] };
 
-/* GOAL-036: kür 10 günden 8 güne indi (bölgeler yalnızca sinuzit.jfif'teki
-   dört yapı). Tema listesi on günlük tedavi yayı olarak duruyor; LEVELS
-   bunlardan sekizini sırayla seçiyor — nefes ritmi, levha ve motif temayla
-   birlikte taşınıyor (L.theme). Çıkanlar: hipereminin kırılması, normal fonksiyon. */
+/* GOAL-036: bölgeler yalnızca sinuzit.jfif'teki dört yapı. GOAL-039: kür 8
+   günden 12 güne çıktı — her bölge önce sol, sonra sağ, sonra iki taraf
+   birlikte oynanıyor ("oyun çok hızlı ilerliyor" geri bildirimi). Tema listesi
+   on iki günlük tedavi yayı; her gün kendi temasını (L.theme) taşıyor — nefes
+   ritmi, levha ve motif temayla birlikte. Eski on günlük listeye iki ara tema
+   eklendi: salgının incelmesi ve basıncın dengelenmesi. */
 const LEVEL_THEMES = [
   { day:1,  name:'Akut tıkanıklık',       target:.70, bossR:9,  bossSpd:15, bossN:1, fire:0.00, mini:3,  miniSpd:19, dose:75, pu:3,
     med:'Tıkanıklık zirvede. Harekete geç!',
@@ -229,12 +231,18 @@ const LEVEL_THEMES = [
   { day:4,  name:'Mukus yoğunluğu',       target:.77, bossR:8,  bossSpd:21, bossN:1, fire:0.75, mini:6,  miniSpd:25, dose:62, pu:4,
     med:'Mukus koyulaştı. Sıkı temizlik!',
     pal:['#240c07','#8a3a1c','#dc7a2c','#ffc56a'] },
+  { name:'Salgının incelmesi',     target:.78, bossR:8,  bossSpd:22, bossN:1, fire:0.85, mini:6,  miniSpd:26, dose:60, pu:4,
+    med:'Salgı inceliyor, akmaya hazır.',
+    pal:['#22120a','#86501c','#e09a30','#ffd27a'] },
   { day:5,  name:'Drenajın düzenlenmesi', target:.79, bossR:7,  bossSpd:23, bossN:1, fire:0.95, mini:7,  miniSpd:27, dose:58, pu:4,
     med:'Drenaj düzeliyor, ritim tuttur.',
     pal:['#1f1806','#7d6316','#d8b433','#ffe58a'] },
   { day:6,  name:'Ostium açılımı',        target:.80, bossR:7,  bossSpd:25, bossN:1, fire:1.15, mini:8,  miniSpd:29, dose:55, pu:5,
     med:'Kanallar aralanıyor, hava sızıyor.',
     pal:['#13230c','#3f6b21','#8ec63c','#d6f58a'] },
+  { name:'Basıncın dengelenmesi',  target:.81, bossR:8,  bossSpd:25, bossN:1, fire:1.25, mini:8,  miniSpd:29, dose:54, pu:5,
+    med:'Hava giriyor, basınç dengeleniyor.',
+    pal:['#0d2216','#2a6236','#5cb86a','#b8f0b0'] },
   { day:7,  name:'Normal fonksiyon',      target:.82, bossR:10, bossSpd:26, bossN:1, fire:1.35, mini:9,  miniSpd:30, dose:52, pu:5,
     med:'Doku normale dönüyor. Devam!',
     pal:['#07211f','#16575a','#38a8a2','#9af0e2'] },
@@ -268,24 +276,34 @@ const LEVEL_THEMES = [
    Burun boşluğu iki ayrı yarım tahtaya bölününce (dar ve uzun, ızgaraya ancak
    ~5000 hücreyle sığıyor) 1-2. günler de yeniden ölçüldü.
    Ölçüm (üç canla kazanma oranı, gün başına 48-112 deneme): %92 · 88 · 84 ·
-   80 · 81 · 88 · 71 · 64; gün başına ölüm 0.7 → 1.4. */
+   80 · 81 · 88 · 71 · 64; gün başına ölüm 0.7 → 1.4.
+   GOAL-039: kür 12 güne çıkıp (her bölgede sol, sağ, iki taraf birlikte)
+   burnun konkaları ve etmoidin bölmeleri kalkınca yeniden ölçüldü. Bölmesiz
+   burun yarımında virüs bütün alanda dolaşabildiği için 1-2. gün zorlaşmıştı
+   (%73 · 55), tek parça etmoid de eski değerlerle %33-39'a düşmüştü; ikisinde
+   de mikrop sayısı ve hedef yüzde indirildi. Hedef eğri yine aynı: 1. gün
+   ~%92'den 12. gün ~%65'e. Ölçüm (gün başına 80 deneme, ±%5 gürültü): %98 ·
+   90 · 90 · 80 · 83 · 78 · 77-88 · 76 · 66 · 65 · 73 · 59; ölüm 0.8 → 1.5. */
 const DAY_TUNE = [
-  { target:.7, bossR:7, bossSpd:14, bossN:1, fire:0, mini:2, miniSpd:17, dose:80 },
-  { target:.72, bossR:7, bossSpd:15, bossN:1, fire:.2, mini:3, miniSpd:18, dose:75 },
-  { target:.66, bossR:7, bossSpd:14, bossN:1, fire:.15, mini:2, miniSpd:16, dose:72 },
-  { target:.68, bossR:9, bossSpd:14, bossN:1, fire:.2, mini:1, miniSpd:16, dose:68 },
-  { target:.76, bossR:9, bossSpd:18, bossN:1, fire:.65, mini:5, miniSpd:22, dose:64 },
-  { target:.76, bossR:9, bossSpd:18, bossN:1, fire:.7, mini:4, miniSpd:22, dose:62 },
+  { target:.66, bossR:7, bossSpd:12, bossN:1, fire:0, mini:1, miniSpd:16, dose:80 },
+  { target:.66, bossR:7, bossSpd:13, bossN:1, fire:0, mini:1, miniSpd:16, dose:78 },
+  { target:.66, bossR:7, bossSpd:14, bossN:1, fire:.1, mini:2, miniSpd:17, dose:76 },
+  { target:.66, bossR:7, bossSpd:14, bossN:1, fire:.25, mini:2, miniSpd:16, dose:72 },
+  { target:.72, bossR:9, bossSpd:14, bossN:1, fire:.2, mini:1, miniSpd:16, dose:68 },
+  { target:.69, bossR:9, bossSpd:15, bossN:1, fire:.2, mini:2, miniSpd:16, dose:68 },
+  { target:.68, bossR:9, bossSpd:15, bossN:1, fire:.3, mini:1, miniSpd:16, dose:64 },
+  { target:.7, bossR:9, bossSpd:15, bossN:1, fire:.2, mini:2, miniSpd:16, dose:62 },
+  { target:.7, bossR:11, bossSpd:16, bossN:1, fire:.2, mini:1, miniSpd:17, dose:62 },
   { target:.71, bossR:11, bossSpd:19, bossN:1, fire:.1, mini:1, miniSpd:16, dose:60, areaT:5400 },
-  { target:.71, bossR:11, bossSpd:20, bossN:1, fire:.2, mini:1, miniSpd:17, dose:58, areaT:5400 }
+  { target:.71, bossR:11, bossSpd:20, bossN:1, fire:.2, mini:1, miniSpd:17, dose:58, areaT:5400 },
+  { target:.71, bossR:11, bossSpd:20, bossN:1, fire:.2, mini:2, miniSpd:17, dose:58 }
 ];
-const LEVELS = [0,1,3,4,5,7,8,9].map((t, i) => Object.assign({}, LEVEL_THEMES[t], DAY_TUNE[i], { day:i+1, theme:t }));
+const LEVELS = LEVEL_THEMES.map((T, i) => Object.assign({}, T, DAY_TUNE[i], { day:i+1, theme:i }));
 /* -------------------------------------------------------------------------
    GOAL-015 — NEFES KATMANI
    Her güne bir burun/sinüs kesiti (cav), bir nefes ritmi (breath: kaç saniyede
    bir vücut nefes almayı deniyor) ve tıkalı nefesin basınç bedeli (pressGain)
-   düşüyor. detail, aynı kesitin içine eklenen konka/polip çıkıntılarının
-   sayısı — aynı arketip gün ilerledikçe daralıyor.
+   düşüyor.
    ------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------
    GOAL-024/036 — ANATOMİK YOLCULUK
@@ -293,12 +311,15 @@ const LEVELS = [0,1,3,4,5,7,8,9].map((t, i) => Object.assign({}, LEVEL_THEMES[t]
    BOARDS): burun boşluğu, maksiller, etmoid ve frontal sinüs. Sıra ilacın
    izlediği yol: burundan giriyor, önce en büyük sinüs olan maksiller, sonra
    gözlerin arasındaki etmoid ve en son, kanalı en uzun olan frontal açılıyor.
-   Her bölgede (burun boşluğu dahil) birinci gün sol,
-   ikinci gün sağ taraf — görseldeki iki taraf gerçekten farklı biçimde.
+   Her bölgede (burun boşluğu dahil) birinci gün sol, ikinci gün sağ taraf —
+   görseldeki iki taraf gerçekten farklı biçimde. GOAL-039: üçüncü gün iki
+   taraf birlikte (side 'iki', L.pair): giriş sahnesinde iki sinüs yüzden öne
+   çıkıyor, birbirine yaklaşıp ekranı kaplıyor; tahta ikisinin orta hatta
+   kaynaşmış tek parça hâli (bkz. pairShift).
    ------------------------------------------------------------------------- */
 const REGIONS = {
   nasal: { name:'Burun boşluğu', cav:'vestibule', music:'vestibule',
-    about:'İlacın girdiği yer. Konkalar şişmiş, hava akımı daralmış; yolculuk buradan başlıyor.' },
+    about:'Siklamenin girdiği yer. Konkalar şişmiş, hava akımı daralmış; yolculuk buradan başlıyor.' },
   maxillary: { name:'Maksiller sinüs', cav:'maxillary', music:'meatus',
     about:'Yanak kemiğindeki en büyük boşluk. Ostiumu tavanda olduğu için yerçekimine karşı boşalır.' },
   ethmoid: { name:'Etmoid sinüs', cav:'ethmoid', music:'sinus',
@@ -306,31 +327,32 @@ const REGIONS = {
   frontal: { name:'Frontal sinüs', cav:'frontal', music:'sinus',
     about:'Alındaki boşluk. Kanalı en uzun, ostiumu en tepede; yayın en zor durağı.' },
 };
-const DAY_REGION = ['nasal','nasal','maxillary','maxillary','ethmoid','ethmoid','frontal','frontal'];
-const DAY_SIDE   = ['sol','sag','sol','sag','sol','sag','sol','sag'];
-const DETAIL_BY_DAY = [0,1, 1,2, 2,3, 2,3];   // hem bölgeler arasında hem bölge içinde daralıyor
-/* Bakteri kür boyunca evriliyor: 1-3. gün küçük (bacteria), 4-6. gün orta
-   (bacteria2), 7-8. gün en büyük ve en hızlı (bacteria3). Boyut ve hız
+const DAY_REGION = ['nasal','nasal','nasal','maxillary','maxillary','maxillary',
+                    'ethmoid','ethmoid','ethmoid','frontal','frontal','frontal'];
+const DAY_SIDE   = ['sol','sag','iki','sol','sag','iki','sol','sag','iki','sol','sag','iki'];
+/* Virüs kür boyunca evriliyor: 1-4. gün küçük, 5-8. gün orta, 9-12. gün en
+   büyük ve en hızlı (görseller assets/bacteria*.png). Boyut ve hız
    DAY_TUNE'daki bossR/bossSpd; görsel buradan. */
-const BOSS_TIER_BY_DAY = [0,0,0, 1,1,1, 2,2];
+const BOSS_TIER_BY_DAY = [0,0,0,0, 1,1,1,1, 2,2,2,2];
 LEVELS.forEach((L,i) => {
   const R = REGIONS[DAY_REGION[i]];
   L.region    = DAY_REGION[i];
   L.regionName= R.name;
   L.regionAbout = R.about;
   L.side      = DAY_SIDE[i];
-  L.sideName  = DAY_SIDE[i] === 'sag' ? 'SAĞ' : 'SOL';
+  L.pair      = DAY_SIDE[i] === 'iki';
+  L.sideName  = L.pair ? 'İKİ TARAF' : DAY_SIDE[i] === 'sag' ? 'SAĞ' : 'SOL';
+  L.sideLong  = L.pair ? 'İKİ TARAF' : L.sideName + ' TARAF';
   L.music     = R.music;
   L.cav       = R.cav;
-  L.detail    = DETAIL_BY_DAY[i];
   L.bossTier  = BOSS_TIER_BY_DAY[i];
-  L.breath    = 11.5 - L.theme*0.5;      // tema 1: 11.5sn ... tema 10: 7sn
-  L.pressGain = 0.15 + L.theme*0.013;    // tıkalı nefesin basınç bedeli
+  L.breath    = 11.5 - L.theme*0.4;      // tema 1: 11.5sn ... tema 12: 7.1sn
+  L.pressGain = 0.15 + L.theme*0.011;    // tıkalı nefesin basınç bedeli
 });
 
 /* -------------------------------------------------------------------------
    GOAL-031 — BİLGİ ŞERİDİ METİNLERİ
-   Oyuncu kestikçe tahtanın yanındaki şeritte beliren kısa bilgiler (8 gün).
+   Oyuncu kestikçe tahtanın yanındaki şeritte beliren kısa bilgiler (12 gün).
    Her gün dört tane: ilki ilk kesimde, sonrakiler hedefin %25/%50/%75'inde (bkz.
    Info). Aynı bölgenin iki günü farklı bilgiler taşıyor ki sağ tarafa geçen
    oyuncu aynı şeyleri tekrar okumasın. Anatomi ve fizyoloji bilgisi; ilacın
@@ -357,6 +379,14 @@ const FACTS = [
       k:'Burun havayı akciğere varmadan ısıtır ve nemlendirir.' },
     { t:'Sinüslerin kapısı', b:'Bütün sinüsler burun boşluğuna küçük ağızlarla açılır. Sinüslere giden yol da buradan geçer.',
       k:'Bütün sinüsler burun boşluğuna küçük ağızlarla açılır.' } ],
+  [ { t:'İki yol, tek nefes', b:'Septum burnu iki ayrı kanala böler. İki taraftan alınan hava arkada, burun ile yutağın birleştiği yerde buluşur.',
+      k:'Septum burnu ikiye böler; iki kanal arkada buluşur.' },
+    { t:'Koana', b:'Burun boşluğunun iki arka ağzına koana denir. Soluduğun hava buradan geçip yutağa iner.',
+      k:'Burnun iki arka ağzı koanadır; hava buradan yutağa iner.' },
+    { t:'Tek örtü', b:'Burnun ve bütün sinüslerin iç yüzeyi kesintisiz tek bir mukozayla kaplıdır; burundaki iltihap bu yüzden sinüslere kolayca yayılır.',
+      k:'Burun ve sinüsler tek mukozayla kaplı; iltihap kolay yayılır.' },
+    { t:'Rinosinüzit', b:'Burun ve sinüs iltihabı çoğu zaman birlikte görüldüğü için hekimler bugün "rinosinüzit" terimini kullanır.',
+      k:'Burun ve sinüs iltihabı birlikte görülür: rinosinüzit.' } ],
   [ { t:'En büyük sinüs', b:'Maksiller sinüs yanak kemiğinin içindedir. Yetişkinde ortalama 15 ml hacmiyle sinüslerin en büyüğüdür.',
       k:'Yanak kemiğinde, yaklaşık 15 ml; sinüslerin en büyüğü.' },
     { t:'Ağzı tepede', b:'Doğal ağzı (ostium) iç duvarın tepesine yakındır. Sinüs boşalmak için yerçekimine değil, silyalara güvenir.',
@@ -373,6 +403,14 @@ const FACTS = [
       k:'Hava girer, basınç dengelenir, biriken salgı akar.' },
     { t:'Dişlerle büyür', b:'Maksiller sinüs doğumda çok küçüktür; kalıcı dişler çıktıkça aşağı doğru büyüyerek erişkin boyutuna ulaşır.',
       k:'Doğumda küçüktür; kalıcı dişler çıktıkça büyür.' } ],
+  [ { t:'Virüsle başlar', b:'Akut sinüzitlerin büyük çoğunluğu soğuk algınlığı virüsleriyle başlar; bakteri ancak az bir kısmına sonradan eklenir.',
+      k:'Akut sinüzitin çoğu virüsle başlar; bakteri nadiren eklenir.' },
+    { t:'İkiz değil', b:'Sağ ve sol maksiller sinüs çoğu zaman birbirinden biraz farklı büyüklükte ve biçimdedir.',
+      k:'Sağ ve sol maksiller sinüs çoğu zaman birbirinden farklıdır.' },
+    { t:'Diş ağrısı gibi', b:'Maksiller sinüs tıkandığında ağrı üst dişlere vurabilir; sinüzit bu yüzden bazen diş ağrısıyla karışır.',
+      k:'Ağrı üst dişlere vurabilir; diş ağrısıyla karışır.' },
+    { t:'Röntgende koyu', b:'Sağlıklı sinüs hava doludur ve röntgende koyu görünür. Salgıyla dolunca beyazlaşır.',
+      k:'Hava dolu sinüs röntgende koyu; salgıyla dolunca beyaz.' } ],
   [ { t:'Petek', b:'Etmoid sinüs tek bir boşluk değil: her iki yanda 3 ile 18 arası küçük hava hücresinden oluşan bir labirent.',
       k:'Tek boşluk değil: her yanda 3-18 küçük hava hücresi.' },
     { t:'Kâğıt duvar', b:'Hücreleri göz çukurundan ayıran duvara lamina papyracea denir; adı gibi kâğıt inceliğindedir.',
@@ -389,6 +427,14 @@ const FACTS = [
       k:'Mukustaki antikor ve enzimler mikropları etkisiz bırakır.' },
     { t:'Koku yarığı', b:'Etmoidin tavanına yakın, septumun yanındaki dar yarıkta koku epiteli bulunur. Burası tıkanınca koku azalır.',
       k:'Etmoidin tavanında koku epiteli var; tıkanınca koku azalır.' } ],
+  [ { t:'İki labirent', b:'Etmoid hücreleri iki yanda ayrı birer labirent oluşturur; aralarında burun boşluğunun üst kısmı ve septum bulunur.',
+      k:'İki yanda ayrı labirent; aralarında burnun üst kısmı var.' },
+    { t:'Adı elekten', b:'Etmoid adı Yunanca "elek" anlamındaki sözcükten gelir; kemiğin delikli, petek gibi yapısını anlatır.',
+      k:'Adı Yunancada "elek"ten gelir; petek gibi deliklidir.' },
+    { t:'Elek gibi tavan', b:'Etmoid kemiğin delikli tavanından geçen ince koku sinirleri burnun tepesine iner.',
+      k:'Delikli tavanından koku sinirleri burna iner.' },
+    { t:'Gözlerin arasında', b:'Etmoid hücreleri iki gözün tam arasında durur; şiştiklerinde ağrı göz çevresinde ve burun kökünde hissedilir.',
+      k:'İki gözün arasında; şişince ağrı göz çevresinde olur.' } ],
   [ { t:'Alındaki boşluk', b:'Frontal sinüsler kaşların üstünde, alın kemiğinin iki tabakası arasındadır. Sağ ve sol çoğu zaman farklı büyüklüktedir.',
       k:'Kaşların üstünde, alın kemiğinde; iki yanı çoğu zaman farklı.' },
     { t:'Parmak izi gibi', b:'Frontal sinüsün kıvrımlı kenarı kişiye özgüdür; röntgenden kimlik tespitinde bile kullanılır.',
@@ -404,7 +450,15 @@ const FACTS = [
     { t:'Neden sinüsümüz var?', b:'Görevleri tam bilinmiyor; kafatasını hafifletmek ve sese tını katmak en bilinen açıklamalar.',
       k:'Tam bilinmiyor; kafatasını hafifletir, sese tını katar.' },
     { t:'Tam havalandırma', b:'Bütün ağızlar açıkken sinüsler burunla birlikte havalanır ve salgı silyalarla kendiliğinden akar.',
-      k:'Ağızlar açıkken sinüsler havalanır, salgı kendiliğinden akar.' } ]
+      k:'Ağızlar açıkken sinüsler havalanır, salgı kendiliğinden akar.' } ],
+  [ { t:'Ortadaki bölme', b:'İki frontal sinüsü ince bir kemik bölme ayırır; bu bölme çoğu zaman tam ortada durmaz.',
+      k:'İki frontal sinüsü ince bir bölme ayırır; çoğu kez ortada değil.' },
+    { t:'Öne eğilince', b:'Frontal sinüs tıkalıyken öne eğilmek alındaki basınç ve ağrıyı artırabilir.',
+      k:'Tıkalıyken öne eğilince alın ağrısı artabilir.' },
+    { t:'Dört çift sinüs', b:'Yüzün iki yanında dörder sinüs vardır: maksiller, etmoid, frontal ve kafatasının derinindeki sfenoid.',
+      k:'Dört çift sinüs: maksiller, etmoid, frontal ve sfenoid.' },
+    { t:'Birlikte nefes', b:'Bütün sinüsler burunla aynı hava yoluna açılır; ağızları açıkken hepsi her nefeste birlikte havalanır.',
+      k:'Sinüsler aynı yola açılır; açıkken her nefeste havalanır.' } ]
 ];
 
 const PLAYER_SPD = 38, PLAYER_SPD_FAST = 60, MEGA_SHARE = .12;
@@ -639,7 +693,8 @@ const bgCanvas = makeCanvas(HW,HH);
 
    Siklamen çiçeğinin yerini alan katman. Her gün, o günün mekanizmasını
    anlatan bir şema açığa çıkıyor: tıkalı geçit, ödem basıncı, daralan
-   damarlar, koyu mukus, drenaj, açılan ostium, silyer taşıma, doz kalkanı,
+   damarlar, koyu mukus, incelen salgı, drenaj, açılan ostium, dengelenen
+   basınç, silyer taşıma, doz kalkanı,
    kronik destek, tam havalandırma.
 
    Hepsi aynı dili konuşuyor — ince ışıklı çizgi, günün paletinden tek vurgu
@@ -794,6 +849,28 @@ const PLATES = [
     c.fillStyle = 'rgba(224,204,138,.55)';
     for(let i=0;i<5;i++){ plateDrop(c, -84+i*42, -30-((i%2)*14), 11); c.fill(); }
   },
+  /* 4b — İncelen salgı: solda koyu, iri topaklar; sağa doğru uzayıp ince
+     iplik ve küçük damlacıklara dönüşüyor (viskozitenin düşüşü) */
+  function(c){
+    const g = c.createLinearGradient(-110,0,110,0);
+    g.addColorStop(0,'rgba(196,150,70,.20)'); g.addColorStop(1,'rgba(200,214,170,0)');
+    c.fillStyle = g; c.fillRect(-110,-78,220,156);
+    for(let i=0;i<5;i++){
+      const y = -56 + i*28, r = 15 - (i%2)*3;
+      bioFill(c,-74,y,r,'rgba(226,182,96,.62)','rgba(150,104,40,.46)');
+      bioBlob(c,-74,y,r,.2,i*2.1); c.fill();
+      c.strokeStyle = 'rgba(222,196,120,.42)'; c.lineCap = 'round';
+      for(let k=0;k<3;k++){
+        c.lineWidth = 5 - k*1.5;
+        const y2 = y + (k-1)*7;
+        c.beginPath(); c.moveTo(-62, y + (k-1)*3);
+        c.bezierCurveTo(-30, y2 - 6, 4, y2 + 8, 40 + k*14, y2 + Math.sin(i+k)*6); c.stroke();
+      }
+    }
+    c.fillStyle = 'rgba(214,228,184,.55)';
+    for(let i=0;i<16;i++){ const x = 44 + (i%4)*17 + rnd(-4,4), y = -62 + (i>>2)*36 + rnd(-6,6);
+      plateDrop(c, x, y, 3 + (i%3)); c.fill(); }
+  },
   /* 5 — Katmanlar hâlinde süzülen mukus */
   function(c){
     for(let i=0;i<3;i++){
@@ -831,6 +908,31 @@ const PLATES = [
     g2.addColorStop(0,'rgba(150,240,236,.28)'); g2.addColorStop(1,'rgba(150,240,236,0)');
     c.fillStyle = g2; c.beginPath(); c.arc(0,0,30,0,7); c.fill();
   },
+  /* 6b — Basıncın dengelenmesi: sinüsün dibinde kalan salgı düz bir yüzeyle
+     duruyor, ağızdan giren hava kabarcıklarla yukarı çıkıp boşluğu dolduruyor */
+  function(c){
+    c.save();
+    bioBlob(c,0,2,92,.12,2.6); c.clip();
+    const ga = c.createLinearGradient(0,-90,0,90);
+    ga.addColorStop(0,'rgba(170,246,236,.26)'); ga.addColorStop(.55,'rgba(120,200,196,.08)'); ga.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle = ga; c.fillRect(-110,-90,220,180);
+    const gf = c.createLinearGradient(0,30,0,96);
+    gf.addColorStop(0,'rgba(190,206,150,.50)'); gf.addColorStop(1,'rgba(120,140,90,.42)');
+    c.fillStyle = gf; c.beginPath(); c.moveTo(-110,32);
+    for(let x=-110;x<=110;x+=10) c.lineTo(x, 32 + Math.sin(x*.06)*1.6);
+    c.lineTo(110,96); c.lineTo(-110,96); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(226,240,200,.55)'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(-110,32);
+    for(let x=-110;x<=110;x+=10) c.lineTo(x, 32 + Math.sin(x*.06)*1.6);
+    c.stroke();
+    c.strokeStyle = 'rgba(206,252,246,.5)'; c.lineWidth = 1.4;
+    for(let i=0;i<14;i++){ const x = -60 + (i%5)*28 + rnd(-6,6), y = 22 - (i/5|0)*28 - rnd(0,10), r = 3 + (i%4)*1.6;
+      c.beginPath(); c.arc(x,y,r,0,7); c.stroke(); }
+    c.restore();
+    c.strokeStyle = 'rgba(226,190,184,.55)'; c.lineWidth = 3;
+    bioBlob(c,0,2,92,.12,2.6); c.stroke();
+    c.fillStyle = 'rgba(8,20,26,.9)'; c.beginPath(); c.ellipse(52,-70,10,6,-.5,0,7); c.fill();
+  },
   /* 7 — Çalışan silyalı epitel yüzeyi */
   function(c){
     epithelium(c, 22, 56, 'rgba(158,206,206,.55)', 'rgba(40,92,100,.55)');
@@ -843,7 +945,7 @@ const PLATES = [
     for(let x=-110;x<=110;x+=10) c.lineTo(x, -34 + Math.sin(x*.05)*5);
     c.lineTo(110,-12); c.closePath(); c.fill();
   },
-  /* 8 — İlacın kendisi: siklamen (Cyclamen europaeum) */
+  /* 8 — Siklamen çiçeği (Cyclamen europaeum) */
   function(c){ drawPlateImage(c, flowerImg); },
   /* 9 — Sağlıklı mukoza kesiti: bazal tabaka, epitel, sil, ince mukus filmi */
   function(c){
@@ -882,7 +984,7 @@ const PLATES = [
   }
 ];
 const PLATE_CAPS = ['KILCAL DAMARLAR DOLU','ÖDEMLİ MUKOZA','DAMARLAR DARALIYOR',
-  'KOYU MUKUS TABAKASI','MUKUS AKIŞI','OSTIUM AÇIKLIĞI','SİLYALI EPİTEL',
+  'KOYU MUKUS TABAKASI','SALGI İNCELİYOR','MUKUS AKIŞI','OSTIUM AÇIKLIĞI','HAVA DOLUYOR','SİLYALI EPİTEL',
   'SİKLAMEN EKSTRESİ','SAĞLIKLI MUKOZA','HAVALANAN SİNÜS'];
 
 /* GOAL-019: levha önce kendi saydam tuvaline çiziliyor. Bunun iki faydası var:
@@ -934,11 +1036,14 @@ function drawCover(c, img){
    baştan sona kaplayan tek parça illüstrasyonu (hi-bit: düz yüzeyler, birkaç
    ton basamağı, temiz çizgi). Ortak iskelet:
      - Boşluğun içi aydınlık, hava dolu (bölge rengine çalan ton, üstten ışık).
-     - Duvarlar boyunca pembe, nemli mukoza zarı — kesitin biçimine kendiliğinden
-       uyuyor (ızgaradaki duvara uzaklıktan), konka ve bölmelerin de çevresini
-       sarıyor.
-     - Zarın yüzeyinde silyalar, havada ışık huzmeleri, dipten tepeye yükselen
-       hava akımları ve kabarcıklar.
+     - Duvarlar boyunca ince, pürüzsüz, hafifçe ışıyan bir zar — kesitin
+       biçimine kendiliğinden uyuyor (ızgaradaki duvara uzaklıktan).
+     - Havada ışık huzmeleri, dipten tepeye yükselen hava akımları ve
+       kabarcıklar.
+   GOAL-040: zar artık et gibi değil. Yüzeydeki silyalar ("kıllı yapı"),
+   damar çizgileri ve kıvrım dokusu kaldırıldı, zar inceldi ve rengi havanın
+   tonuna yaklaştı: sahne yalnızca "bir boşluğun içindeyim" hissini versin,
+   itici bir organik ayrıntı göstermesin.
    Bölgeye özel: burunda konkaların arasından akan hava; maksillerde tavanda
    ışık saçan ostium ağzı ve tabanda diş kökleri; etmoidde ince duvarlı bal
    peteği hücreleri ve parlayan ağızları; frontalde güçlü ışık ve dipteki
@@ -953,12 +1058,12 @@ const SCENE_AIR = {   // dipten tepeye
   ethmoid:   ['#08182c','#123762','#2a64a0','#6aa2d6','#dcecfb'],
   frontal:   ['#0a1f1a','#13453a','#2a7c63','#72c49f','#e2f8ea']
 };
-const SCENE_MUC = ['#4a1d2c','#8a3a4d','#c9677a','#ec9aa6'].map(hex2rgb);   // duvardan yüzeye
-const SCENE_MUC_HI = hex2rgb('#ffe0e4'), SCENE_VESSEL = hex2rgb('#a8405a');
+const SCENE_MUC = ['#3a2030','#7a4658','#c08494','#f0c4c8'].map(hex2rgb);   // duvardan yüzeye: yumuşak gül-şeftali
+const SCENE_MUC_HI = hex2rgb('#fff0ec');
 const sceneDist = new Float32Array(GW*GH);
 const sceneMask = makeCanvas(HW,HH), sceneOv = makeCanvas(HW,HH);
 /* Izgarada duvara (boşluk dışı hücre) uzaklık, hücre biriminde — iki geçişli
-   chamfer. Mukoza zarı ve silyalar bu alanı izliyor. */
+   chamfer. Duvardaki zar bu alanı izliyor. */
 function sceneDistance(){
   const D = sceneDist, INF = 1e6, R2 = Math.SQRT2;
   for(let i=0;i<GW*GH;i++) D[i] = cavity[i] ? INF : 0;
@@ -975,6 +1080,19 @@ function sceneDistance(){
     if(x<GW-1) v = Math.min(v, D[i+1]+1);
     if(y<GH-1){ v = Math.min(v, D[i+GW]+1); if(x<GW-1) v = Math.min(v, D[i+GW+1]+R2); if(x>0) v = Math.min(v, D[i+GW-1]+R2); }
     D[i] = v;
+  }
+  /* GOAL-040: üç geçiş 3x3 kutu bulanıklığı — chamfer alanının eş-uzaklık
+     çizgileri ızgarada köşeli; zarın iç kenarı basamak basamak görünüyordu.
+     Duvar hücreleri 0'da kalıyor, yalnızca boşluğun içi yumuşuyor. */
+  const tmp = new Float32Array(GW*GH);
+  for(let pass=0; pass<3; pass++){
+    for(let y=1;y<GH-1;y++) for(let x=1;x<GW-1;x++){
+      const i = y*GW+x; if(!D[i]){ tmp[i] = 0; continue; }
+      let sum = 0;
+      for(let dy=-GW; dy<=GW; dy+=GW) sum += D[i+dy-1] + D[i+dy] + D[i+dy+1];
+      tmp[i] = Math.max(.5, sum/9);
+    }
+    for(let y=1;y<GH-1;y++) for(let x=1;x<GW-1;x++){ const i = y*GW+x; if(D[i]) D[i] = tmp[i]; }
   }
 }
 /* Duvara uzaklık, ızgara biriminde herhangi bir noktada (hücre merkezleri arası bilineer) */
@@ -1001,8 +1119,8 @@ function paintHealthy(L){
   const A = sceneAnchors(), rg = L.region;
   const arc = clamp((L.day-1)/Math.max(1, LEVELS.length-1), 0, 1), bright = .84 + .2*arc;
   const air = (SCENE_AIR[rg] || SCENE_AIR.nasal).map(hex2rgb);
-  const T = rg === 'ethmoid' ? 3.2 : 4.4;                       // mukoza kalınlığı (hücre)
-  const n1 = fbmHi(46, L.day*131+7, 3), n2 = fbmHi(10, L.day*71+3, 2);
+  const T = rg === 'ethmoid' ? 2.0 : 2.6;                       // zar kalınlığı (hücre) — ince bir kenar
+  const n1 = fbmHi(46, L.day*131+7, 3);
   const img = c.createImageData(HW,HH), d = img.data;
   const mk = sceneMask.getContext('2d'), mimg = mk.createImageData(HW,HH), md = mimg.data;
   const col = [0,0,0], ac = [0,0,0];
@@ -1012,18 +1130,18 @@ function paintHealthy(L){
     const ly = gy - gsy;
     for(let px=0; px<HW; px++){
       const i = py*HW+px, gx = (px+.5)/SC;
-      const dist = distAt(gx, gy) - .5, e = T*(.62 + .8*n1[i]);
+      const dist = distAt(gx, gy) - .5, e = T;                    // sabit kalınlık: iç kenar düzgün bir eğri
       // hava: dipten tepeye aydınlanıyor, tepedeki kaynaktan ışık, zarın dibinde hafif gölge
       const lx = gx - gsx, glow = Math.exp(-(lx*lx + ly*ly)/gs2);
       const ao = 1 - sstep(e, e + 3.5, dist);
       rampTo(air, (.14 + v*.48 + glow*.28 + (n1[i]-.5)*.12 - ao*.10)*bright, ac);
-      // mukoza: duvardan yüzeye koyudan açığa, damarlar, nemli yüzey parıltısı
-      const m = clamp(dist/e, 0, 1), fold = Math.sin(n2[i]*18)*.5 + .5;   // ince kıvrımlar
-      rampTo(SCENE_MUC, Math.pow(m, .85)*(.86 + fold*.14), col);
-      const rid = Math.pow(1 - Math.abs(n2[i]*2 - 1), 3);
-      mixTo(col, SCENE_VESSEL, rid*(1-m)*.45);
-      mixTo(col, SCENE_MUC_HI, sstep(.78,.95,m)*(1 - sstep(.95,1,m))*.6 + glow*m*.12);
-      const aw = sstep(e - .22, e + .22, dist);                 // havanın payı
+      // zar: duvardan yüzeye koyudan açığa, pürüzsüz; havanın tonunu alıyor,
+      // yüzeyinde tek ince ışık çizgisi (damar, kıvrım, sil yok)
+      const m = clamp(dist/e, 0, 1);
+      rampTo(SCENE_MUC, Math.pow(m, .8), col);
+      mixTo(col, ac, .28 + .22*m);
+      mixTo(col, SCENE_MUC_HI, sstep(.72,.92,m)*(1 - sstep(.92,1,m))*.45 + glow*m*.10);
+      const aw = sstep(e - .3, e + .3, dist);                   // havanın payı
       mixTo(col, ac, aw);
       d[i*4] = col[0]; d[i*4+1] = col[1]; d[i*4+2] = col[2]; d[i*4+3] = 255;
       md[i*4+3] = aw*255;
@@ -1038,7 +1156,6 @@ function paintHealthy(L){
   if(rg === 'ethmoid') sceneLayer(c, o => sceneHoneycomb(o, A, R), true);
   sceneLayer(c, o => sceneAirflow(o, A, R, rg), true, 'lighter');
   sceneLayer(c, o => sceneBubbles(o, A, R, rg === 'frontal' ? 40 : 24), true);
-  sceneLayer(c, o => sceneCilia(o, R, T, n1), false);
   if(rg === 'maxillary'){ sceneLayer(c, o => sceneTeeth(o, A), false); sceneLayer(c, o => sceneOstium(o, A), false, 'lighter'); }
   if(rg === 'ethmoid') sceneLayer(c, o => sceneOpenings(o, A, R), true);
   if(rg === 'frontal') sceneLayer(c, o => sceneDuct(o, A), false, 'lighter');
@@ -1100,25 +1217,6 @@ function sceneBubbles(o, A, R, n){
     o.strokeStyle = 'rgba(230,255,252,.45)'; o.lineWidth = .14; o.stroke();
     o.fillStyle = 'rgba(255,255,255,.75)'; o.beginPath(); o.arc(x - r*.35, y - r*.35, r*.22, 0, 7); o.fill();
   }
-}
-/* Mukoza yüzeyindeki silyalar: zarın iç yüzeyinden havaya, yukarıya (ostiuma)
-   doğru eğilen kısa teller. Yön, duvara uzaklık alanının eğiminden. */
-function sceneCilia(o, R, T, n1){
-  o.strokeStyle = 'rgba(255,224,228,.55)'; o.lineWidth = .16;
-  o.beginPath();
-  for(let y=1;y<GH-1;y++) for(let x=1;x<GW-1;x++){
-    const i = y*GW+x; if(!cavity[i]) continue;
-    const px = Math.min(HW-1, ((x+.5)*SC)|0), py = Math.min(HH-1, ((y+.5)*SC)|0);
-    const dist = sceneDist[i] - .5, e = T*(.62 + .8*n1[py*HW+px]);
-    if(Math.abs(dist - e) > .5 || ((i*2654435761)>>>0) % 3) continue;
-    let nx = sceneDist[i+1] - sceneDist[i-1], ny = sceneDist[i+GW] - sceneDist[i-GW];
-    const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
-    let tx = -ny, ty = nx; if(ty > 0){ tx = -tx; ty = -ty; }
-    const bx = x + .5 + nx*(e - dist), by = y + .5 + ny*(e - dist), len = 1.1 + R()*.6;
-    o.moveTo(bx, by);
-    o.quadraticCurveTo(bx + nx*len*.6, by + ny*len*.6, bx + nx*len + tx*len*.45, by + ny*len + ty*len*.45);
-  }
-  o.stroke();
 }
 /* Maksiller: tavanda ışık saçan ostium ağzı */
 function sceneOstium(o, A){
@@ -1305,11 +1403,15 @@ const ANAT = {
                  [138,178],[143,182],[147,186],[150,190],[153,194],[157,196.8],[162,197.8],[164.8,196.5],[165,180]]),
     sag: imgPts([[170.5,161],[174,159],[178,159.8],[184,162.8],[190,165],[196,167],[201,169.5],[205,172.5],[203,175],
                  [198,178],[192,182],[186,186],[181,190.5],[177,194.5],[174,197.4],[171,197.8],[170.4,190],[170.4,170]]) },
+  /* GOAL-039: etmoid tek parça bir petek silüeti — içteki hücre bölmeleri
+     yerine dış kenardaki üç hücre kabarıklığı. Boyunlar enin ~%20'si kadar:
+     petek okunuyor ama oynanışta cep kapatmıyor. */
   ethmoid: {
-    sol: imgPts([[152,199],[158,198.5],[161.5,199.5],[161.5,205],[161.5,215],[161.5,225],[161,233],[159.5,238],[156,240.5],
-                 [151.5,239.5],[148,235.5],[146.5,229],[145.5,221],[145.5,214],[147,208],[149,202.5]]),
-    sag: imgPts([[179,198.5],[183,197.5],[187,200],[188.5,206],[189,212],[191,217],[192.5,222],[193,226],[191.5,230],
-                 [188,232.5],[184,233],[180.5,231.5],[179,228],[179,215],[179,205]]) },
+    sol: imgPts([[152,199],[158,198.5],[161.5,199.5],[161.5,215],[161.5,230],[160.5,237],[157,240.5],[152,240],
+                 [148,237],[146,232],[146.5,227.5],[148.5,224.5],[146,220.5],[145,215.5],[146,212],[148,210],
+                 [146.5,206.5],[147,202.5],[149.5,200]]),
+    sag: imgPts([[179,198.5],[183,197.5],[187,199.5],[189,203],[189,208],[187.5,211.5],[189.5,215],[191.5,219],
+                 [190.5,222.5],[192.5,225.5],[192.5,229],[190,232],[185.5,233.5],[181,232],[179,228],[179,215],[179,205]]) },
   /* Burun boşluğunun iki yarımı; aradaki boşluk septum. Üstte gözlerin
      arasına uzanan dar kolon, altta birleştikleri taban. */
   nasal: {
@@ -1334,59 +1436,46 @@ const ANAT_DUCTS = [
   ['ethmoid','sag', imgPts([[180.5,205],[176,205]]), .022], ['ethmoid','sag', imgPts([[180.5,219],[176,219]]), .022],
   ['ethmoid','sag', imgPts([[180.5,228],[176,228]]), .022]
 ];
-/* Kemik lameller — boşluğu bölen: etmoid hücre bölmeleri ve konka sarmalları */
-const ANAT_WALLS = [
-  ['ethmoid','sol', imgPts([[162,211],[156,211.6],[149,210.6],[144,210]]), .012],
-  ['ethmoid','sol', imgPts([[162,224.4],[155,224],[147.5,222.6],[143.5,222]]), .012],
-  ['ethmoid','sag', imgPts([[178,213],[183,213.6],[189.5,212.6],[194,212]]), .012],
-  ['ethmoid','sag', imgPts([[178,223.6],[184,224],[191.5,223],[197,222.4]]), .012],
-  ['nasal','sol', imgPts([[154,230.5],[157.5,234.5],[160.5,238.5],[162,242],[160,244.6],[157.2,243.6]]), .017],
-  ['nasal','sol', imgPts([[149.5,249],[150.2,254],[150.8,259],[153.2,263.6],[157.4,265],[160.4,262.6],[160.6,258.6]]), .017],
-  ['nasal','sag', imgPts([[184.5,230.5],[181,234.5],[178,238.5],[176.5,242],[178.5,244.6],[181.3,243.6]]), .017],
-  ['nasal','sag', imgPts([[189,249],[188.3,254],[187.7,259],[185.3,263.6],[181.1,265],[178.1,262.6],[177.9,258.6]]), .017]
-];
-/* Küçük yuvarlak leke (görsel pikseli merkez ve yarıçapla) */
-const dotPx = (x, y, r) => imgPts([0,1,2,3,4,5,6].map(i => { const a = i/7*Math.PI*2;
-  return [x + Math.cos(a)*r*(1 + (i%2)*.12), y + Math.sin(a)*r]; }));
-/* Günün hastalık ayrıntıları (d = DETAIL_BY_DAY): polip, kist, şişkin konka.
-   Yalnızca o günün hedef bölgesinde ve tarafında; haritada da hedefin üstünde. */
-function anatDisease(region, side, d){
-  const R = side === 'sag', out = [];
-  if(region === 'nasal' && d >= 1){
-    for(const w of ANAT_WALLS) if(w[0] === 'nasal' && w[1] === side) out.push({ line:w[2], w:.026 });   // ödemli konkalar
-    out.push({ pts:R ? imgPts([[172.8,246],[176.8,249.5],[172.8,253]]) : imgPts([[165.2,246],[161.2,249.5],[165.2,253]]) }); // septum mahmuzu
-  }
-  if(region === 'maxillary'){
-    if(d >= 1) out.push({ pts:R ? dotPx(224.5,247,4.5) : dotPx(109.5,247,4.5) });   // retansiyon kisti
-    if(d >= 2) out.push({ pts:R ? dotPx(194,235,3) : dotPx(143,235,3) });            // ağız önünde polip
-  }
-  if(region === 'ethmoid'){
-    if(d >= 2) out.push({ pts:R ? dotPx(184,204,2.4) : dotPx(154,204,2.4) });        // hücrede polip
-    if(d >= 3) out.push({ pts:R ? dotPx(186,219,2.2) : dotPx(151,217,2.2) });
-  }
-  if(region === 'frontal'){
-    if(d >= 2) for(const x of R ? [182, 194] : [155, 143])                            // dalgaların yarım bölmeleri
-      out.push({ line:imgPts([[x, 157], [x + (R ? -1 : 1), 171]]), w:.012 });
-    if(d >= 3) out.push({ pts:R ? dotPx(198,172,3) : dotPx(134,170.5,3) });           // mukosel
-  }
-  return out;
-}
+/* GOAL-039: tahtaların içi tek parça. Burun boşluğundaki konka sarmalları,
+   etmoid hücre bölmeleri, polip ve kist lekeleri kaldırıldı — oynanışta
+   alanı cep cep bölüyor, kesimleri kilitliyordu ("burnun içi tek parça olsun,
+   içerideki çizgi gibi şeyler olmasın"). Harita tahtayla aynı tanımdan
+   çizildiği için orada da yoklar: dış hatlar sinüsü tanıtmaya yetiyor. */
 const sideKey = sg => sg < 0 ? 'sol' : 'sag';
-/* Her bölümün tahtası: hangi yapılar, iki taraf mı (both), üstten/alttan
-   kırpılıyor mu. Pencere bu yapıların sınır kutusu. Burun boşluğunun gözlerin
-   arasına uzanan dar kolonu burun ve maksiller günlerinde tepeden kırpılıyor —
-   tahtayı boyuna uzatıp alanı daraltıyordu; etmoid gününde ise kolon asıl yol,
-   orada burnun aşağıda genişleyen kısmı kırpılıyor ve konkaları çizilmiyor.
-   Burun boşluğu da artık diğerleri gibi iki ayrı bölüm: 1. gün sol, 2. gün
-   sağ yarım (septumun iki yanı). */
+/* Her bölümün tahtası: hangi yapı, üstten kırpılıyor mu. Pencere bu yapının
+   sınır kutusu. Burun boşluğunun gözlerin arasına uzanan dar kolonu tepeden
+   kırpılıyor — tahtayı boyuna uzatıp alanı daraltıyordu. GOAL-039: etmoid
+   artık burnun kolonuyla birlikte değil, yalnızca kendi dış hattıyla —
+   hücreler, kanallar ve kolon tahtayı birbirine dar boyunlarla bağlı odalara
+   bölüyordu; birebir görsel değil genel biçim yeterli. */
 const BOARDS = {
-  nasal:     { parts:['nasal'], clipY0:IMG([0,224])[1] },   // tek yarımda kolon tahtayı fazla uzatıyordu
-  maxillary: { parts:['maxillary','nasal'], clipY0:IMG([0,213])[1] },
-  ethmoid:   { parts:['ethmoid','nasal'], clipY:IMG([0,238])[1], noWalls:['nasal'] },
+  nasal:     { parts:['nasal'], clipY0:IMG([0,224])[1] },
+  maxillary: { parts:['maxillary'] },
+  ethmoid:   { parts:['ethmoid'] },
   frontal:   { parts:['frontal'] }
 };
+/* Günün tarafları: tek taraf ya da iki taraf birlikte (L.pair) */
+const daySides = L => L.pair ? ['sol','sag'] : [L.side];
+/* GOAL-039 — İKİ TARAF BİRLİKTE
+   Sol ve sağ sinüs orta hatta doğru kaydırılıp üst üste bindiriliyor; iki
+   biçim kaynaşıp tek parça, geniş bir tahta oluyor. Kayma yüz biriminde, her
+   taraf için ayrı işaretle (sol sağa, sağ sola). Miktar: iki biçimin orta
+   hattaki en iç noktaları arasındaki açığın yarısı + bindirme payı (en dar
+   biçimin eninin PAIR_OVERLAP katı). Pay, birleşim yerinde dar bir boğaz
+   kalmasın diye bölgeye göre ayarlı; burunda septum aralığını da kapatıyor. */
+const PAIR_OVERLAP = { nasal:.28, maxillary:.22, ethmoid:.30, frontal:.16 };
+function pairShift(region){
+  const S = ANAT[region].sol, D = ANAT[region].sag, xs = P => P.map(p => p[0]);
+  const gap = Math.min(...xs(D)) - Math.max(...xs(S));
+  const w = Math.min(Math.max(...xs(S)) - Math.min(...xs(S)), Math.max(...xs(D)) - Math.min(...xs(D)));
+  return gap/2 + PAIR_OVERLAP[region]*w;
+}
+/* Bir tarafın tahtadaki yatay kayması (tek taraflı günlerde 0) */
+const sideDX = (L, sd) => L.pair ? (sd === 'sol' ? 1 : -1)*(L.pairD || 0) : 0;
 /* Eski kesitlerin hücre alanı — yeni tahtaların ölçeği buna göre (gün dengesi) */
-const AREA_BY_DAY = [7839,7517, 6989,6663, 6620,6548, 5698,5378];
+/* GOAL-039: etmoid tahtaları uzun ve dar; ızgaraya ancak bu kadar sığıyor
+   (yükseklik sınırı), hedef de ulaşılabilen alan. İki taraflı günler daha geniş. */
+const AREA_BY_DAY = [7839,7517,8200, 6989,6663,8600, 5900,4900,6600, 5698,5378,8600];
 /* Harita görselleri (assets/board): koyu lacivert zeminin üstünde kızarık bir
    boşluk. Boşluk, kırmızının maviyi geçtiği pikseller; zemindeki soluk
    desenler ayrı küçük parçalar olarak kalıyor, en büyük parça tutulup içindeki
@@ -1543,64 +1632,64 @@ function buildDrainage(){
     D.frDuct = frDuct;
   }
 }
-/* Günün harita görseli: önce güne özel, sonra bölge + taraf. */
-function boardArt(L){
-  return boardMasks['day' + String(L.day).padStart(2,'0')] || boardMasks[L.region + '_' + L.side]
-      || (BOARDS[L.region].both ? boardMasks[L.region] : null) || null;
+/* Bir tarafın harita görseli: önce güne özel (yalnızca tek taraflı günde),
+   sonra bölge + taraf. */
+function sideArt(L, sd){
+  return (!L.pair && boardMasks['day' + String(L.day).padStart(2,'0')]) || boardMasks[L.region + '_' + sd] || null;
 }
-/* Tahtada olan yapılar: harita görselli günlerde yalnızca günün sinüsü */
-const boardParts = L => boardArt(L) ? [L.region] : BOARDS[L.region].parts;
-function boardWindow(region, side, art){
-  const B0 = BOARDS[region], sides = B0.both ? ['sol','sag'] : [side];
-  let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
-  if(art && art.win) return art.win;        // biçimi haritada da olan görsel
-  if(art){
-    /* Yalnızca güne özel görsel (dayNN): yüz haritasındaki sinüsün yerine ve
-       kabaca onun büyüklüğünde oturuyor, dalış haritadaki sinüse iniyor. Asıl
-       ölçeği yine fitBoard (alan hedefi) belirliyor. */
-    for(const sd of sides) for(const p of ANAT[region][sd]){
-      x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+const boardArt = L => sideArt(L, daySides(L)[0]);
+function boardWindow(L){
+  const B0 = BOARDS[L.region], sides = daySides(L);
+  let x0 = 9, y0 = 9, x1 = -9, y1 = -9, framed = false;
+  const ext = (x, y) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); };
+  for(const sd of sides){
+    const art = sideArt(L, sd), dx = sideDX(L, sd);
+    if(art && art.win){ ext(art.win[0] + dx, art.win[1]); ext(art.win[2] + dx, art.win[3]); framed = true; continue; }
+    if(art){
+      /* Yalnızca güne özel görsel (dayNN): yüz haritasındaki sinüsün yerine ve
+         kabaca onun büyüklüğünde oturuyor, dalış haritadaki sinüse iniyor. Asıl
+         ölçeği yine fitBoard (alan hedefi) belirliyor. */
+      let a0 = 9, b0 = 9, a1 = -9, b1 = -9;
+      for(const p of ANAT[L.region][sd]){ a0 = Math.min(a0, p[0]); a1 = Math.max(a1, p[0]); b0 = Math.min(b0, p[1]); b1 = Math.max(b1, p[1]); }
+      const S = Math.sqrt((a1-a0)*(b1-b0)), ww = S/Math.sqrt(art.ar), wh = S*Math.sqrt(art.ar);
+      const cx = (a0+a1)/2, cy = (b0+b1)/2;
+      art.dayWin = [cx - ww/2, cy - wh/2, cx + ww/2, cy + wh/2];
+      ext(art.dayWin[0], art.dayWin[1]); ext(art.dayWin[2], art.dayWin[3]); framed = true; continue;
     }
-    const S = Math.sqrt((x1-x0)*(y1-y0)), ww = S/Math.sqrt(art.ar), wh = S*Math.sqrt(art.ar);
-    const cx = (x0+x1)/2, cy = (y0+y1)/2;
-    return [cx - ww/2, cy - wh/2, cx + ww/2, cy + wh/2];
+    for(const rg of B0.parts) for(const p of ANAT[rg][sd]){
+      if(B0.clipY0 !== undefined && p[1] < B0.clipY0) continue;
+      ext(p[0] + dx, p[1]);
+    }
   }
-  for(const sd of sides) for(const rg of B0.parts) for(const p of ANAT[rg][sd]){
-    if(B0.clipY !== undefined && p[1] > B0.clipY) continue;
-    if(B0.clipY0 !== undefined && p[1] < B0.clipY0) continue;
-    x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
-  }
+  if(framed) return [x0, y0, x1, y1];
   const m = .02;
-  return [x0 - m, B0.clipY0 !== undefined ? B0.clipY0 : y0 - m, x1 + m, B0.clipY !== undefined ? B0.clipY : y1 + m];
+  return [x0 - m, B0.clipY0 !== undefined ? B0.clipY0 : y0 - m, x1 + m, y1 + m];
 }
 function roundRectPath(c, x0, y0, x1, y1, r){
   c.beginPath();
   c.moveTo(x0+r, y0); c.arcTo(x1, y0, x1, y1, r); c.arcTo(x1, y1, x0, y1, r);
   c.arcTo(x0, y1, x0, y0, r); c.arcTo(x0, y0, x1, y0, r); c.closePath();
 }
-/* Tahtayı yüz uzayında çizer (çağıran dönüşümü kurar). Beyaz = boşluk. */
+/* Tahtayı yüz uzayında çizer (çağıran dönüşümü kurar). Beyaz = boşluk.
+   İki taraflı günde her taraf kendi kaymasıyla; biçimler orta hatta kaynaşıyor. */
 function paintBoard(c, L){
-  const B0 = BOARDS[L.region], sides = B0.both ? ['sol','sag'] : [L.side];
-  const art = boardArt(L);
-  if(art){                                  // harita görseli: maskesi pencereye
-    const w = L.win;
-    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-    c.drawImage(art.cv, w[0], w[1], w[2]-w[0], w[3]-w[1]);
-    return;
-  }
-  c.lineCap = 'round'; c.lineJoin = 'round';
+  const B0 = BOARDS[L.region];
   c.fillStyle = '#fff';
-  for(const sd of sides){
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  let anyArt = false;
+  for(const sd of daySides(L)){
+    const art = sideArt(L, sd), dx = sideDX(L, sd);
+    if(art){                                  // harita görseli: maskesi penceresine
+      const w = art.win || art.dayWin;
+      c.drawImage(art.cv, w[0] + dx, w[1], w[2]-w[0], w[3]-w[1]);
+      anyArt = true; continue;
+    }
+    c.save(); c.translate(dx, 0);
     for(const rg of B0.parts) blob(c, ANAT[rg][sd]);
-    for(const d of ANAT_DUCTS) if(d[1] === sd && B0.parts.includes(d[0]) && d[4] !== 'map') lamella(c, d[2], d[3]);
+    c.restore();
   }
-  c.fillStyle = '#000';
-  for(const w of ANAT_WALLS) if(sides.includes(w[1]) && B0.parts.includes(w[0]) && !(B0.noWalls || []).includes(w[0]))
-    lamella(c, w[2], w[3]);
-  for(const e of anatDisease(L.region, L.side, L.detail|0)){
-    if(e.pts) blob(c, e.pts); else lamella(c, e.line, e.w);
-  }
-  // pencere: dışı kemik (yalnızca etmoidde gerçekten bir şey kırpıyor)
+  if(anyArt) return;
+  // pencere: dışı kemik (burunda kolonun tepesini kırpıyor)
   const w = L.win, r = .12*Math.min(w[2]-w[0], w[3]-w[1]);
   c.globalCompositeOperation = 'destination-in';
   c.fillStyle = '#fff'; roundRectPath(c, w[0], w[1], w[2], w[3], r); c.fill();
@@ -1698,7 +1787,8 @@ function sampleCavity(raw, lo){
 }
 function buildCavity(L){
   // GOAL-034: günün penceresi ve hedef alanı (anatomi tanımı LEVELS'tan sonra geliyor)
-  L.win  = boardWindow(L.region, L.side, boardArt(L));
+  L.pairD = L.pair ? pairShift(L.region) : 0;   // GOAL-039: iki taraf birlikte
+  L.win  = boardWindow(L);
   L.area = L.areaT || AREA_BY_DAY[L.day-1];   // areaT: günün ayar tablosu (GOAL-037)
   const f = fitBoard(L, g => sampleCavity(rasterBoard(L, g, true), true));
   L.face = f;                    // giriş sahnesi dalışı bu yerleşime iniyor
@@ -2978,17 +3068,15 @@ function pctAcc(n){
 /* "yolun %6'sı": iyelik eki (belirtme ekinin son hecesi düşmüş hâli; 0 = sıfır → ı) */
 function pctPoss(n){ return Math.round(n) === 0 ? 'ı' : pctAcc(n).slice(0, -2); }
 const rgbaA = (c, a) => 'rgba('+c[0]+','+c[1]+','+c[2]+','+a.toFixed(3)+')';
-const sideSign = i => DAY_SIDE[i] === 'sag' ? 1 : -1;
-const faceShape = (region, sg) => ANAT[region][sideKey(sg)];
-function faceBBox(region, sg){
+/* Bugünün sinüs(ler)inin yüz haritasındaki sınır kutusu */
+function faceBBox(L){
   let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
-  for(const p of faceShape(region, sg)){
+  for(const sd of daySides(L)) for(const p of ANAT[L.region][sd]){
     x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
     y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
   }
   return { x0, y0, x1, y1, w:x1-x0, h:y1-y0 };
 }
-function faceRegionPath(c, region, sg){ c.beginPath(); splinePath(c, faceShape(region, sg), true); }
 /* Yumuşak, kenarı sönen elips — yüzdeki ışık ve gölgeler için */
 function faceSoft(c, x, y, rx, ry, col){
   c.save(); c.translate(x, y); c.scale(rx, ry);
@@ -3097,7 +3185,7 @@ const Cine = {
   el:$('cine'), cv:$('cineCv'), title:$('cineTitle'), card:$('cineCard'), skipBtn:$('cineSkip'),
   ctx:null, faceCv:null, maskCv:makeCanvas(HW,HH),
   active:false, ended:false, t0:0, raf:0, L:null, idx:0, cues:0,
-  path:null, pathLen:0, dpr:1, W:0, H:0, s0:1, o0:[0,0],
+  paths:[], dpr:1, W:0, H:0, s0:1, o0:[0,0],
   END:3.9,
   /* Yüz haritasında sinüs adları ancak ~0,4 sn tam görünüyordu; okunmadan
      yakınlaşma başlıyordu. İlaç hedefe vardığı anda (HOLD_AT) sahne HOLD
@@ -3119,7 +3207,7 @@ const Cine = {
     this.el.style.background = '';
     document.body.classList.add('cineOn');
     const T = this.title;
-    T.querySelector('.k').textContent = 'GÜN ' + String(L.day).padStart(2,'0') + ' · ' + L.sideName + ' TARAF';
+    T.querySelector('.k').textContent = 'GÜN ' + String(L.day).padStart(2,'0') + ' · ' + L.sideLong;
     T.querySelector('b').textContent = L.regionName;
     T.querySelector('i').textContent = L.name;
     T.classList.remove('on','rest');
@@ -3134,7 +3222,7 @@ const Cine = {
     this.raf = requestAnimationFrame(step);
   },
   /* Künye kartı. Sıra okunma önceliği: önce ne yapılacak (hedef, büyük),
-     sonra bugün ne değişti, sonra günün üç oyuncusu ikonla (nefes, bakteri,
+     sonra bugün ne değişti, sonra günün üç oyuncusu ikonla (nefes, virüs,
      mikrop), en son bölge bilgisi ve günün bilgi görseli. Her gün aynı olan
      uzun kural paragrafı ikon satırına indi; değişen tek şey öne çıkıyor. */
   buildCard(L){
@@ -3144,21 +3232,22 @@ const Cine = {
     const BOSS_URL = [bossAssetUrl, boss2AssetUrl, boss3AssetUrl];
     const news = [];
     if(P && P.region !== L.region) news.push({ t:'Yeni bölge: ' + L.regionName });
-    if(P && P.bossTier !== L.bossTier) news.push({ t:L.bossTier === 2 ? 'Bakteri en büyük ve en hızlı hâlinde' : 'Bakteri büyüdü',
+    if(P && P.bossTier !== L.bossTier) news.push({ t:L.bossTier === 2 ? 'Virüs en büyük ve en hızlı hâlinde' : 'Virüs büyüdü',
                                                    img:BOSS_URL[L.bossTier] });
-    if(P && P.region === L.region && P.side !== L.side) news.push({ t:'Aynı bölgenin ' + L.sideName.toLocaleLowerCase('tr-TR') + ' tarafı' });
+    if(P && P.region === L.region && P.side !== L.side)
+      news.push({ t:L.pair ? 'İki taraf birlikte: sağ ve sol tek alanda' : 'Aynı bölgenin ' + L.sideName.toLocaleLowerCase('tr-TR') + ' tarafı' });
     const newsHtml = news.length ? `<div class="ccNew"><span>BUGÜN YENİ</span>${news.map(n =>
         `<p>${n.img ? `<img src="${n.img}" alt="">` : ''}${escapeHtml(n.t)}</p>`).join('')}</div>` : '';
     this.card.innerHTML =
       `<div class="ccMain">
-         <div class="ccK">GÜN ${String(L.day).padStart(2,'0')} &nbsp;·&nbsp; ${L.sideName} TARAF</div>
+         <div class="ccK">GÜN ${String(L.day).padStart(2,'0')} &nbsp;·&nbsp; ${L.sideLong}</div>
          <div class="ccT">${escapeHtml(L.regionName)}</div>
          <div class="ccS">${escapeHtml(L.name)}</div>
          <div class="ccGoal"><span>HEDEF</span><b>Alanın <em>%${pct}</em>'${pctAcc(pct)} temizle</b></div>
          ${newsHtml}
          <div class="ccIcons">
            <div><span class="ccIc howBreath"></span><b>Nefes · ${L.breath.toFixed(0)} sn</b><i>Dipten tepeye aç: puan ×1,8</i></div>
-           <div><img class="ccIc" src="${BOSS_URL[L.bossTier|0]}" alt=""><b>Bakteri</b><i>${TIER[L.bossTier|0]}</i></div>
+           <div><img class="ccIc" src="${BOSS_URL[L.bossTier|0]}" alt=""><b>Virüs</b><i>${TIER[L.bossTier|0]}</i></div>
            <div><span class="ccIc ccPair"><img src="${minionFlagellaAssetUrl}" alt=""><img src="${minionSporeAssetUrl}" alt=""></span>
              <b>Mikrop · ${L.mini}</b><i>Çizgini keser</i></div>
          </div>
@@ -3205,12 +3294,15 @@ const Cine = {
     this.placeCard();
     if(this.ended) this.frame();
   },
-  /* İlacın yolu: o tarafın burun deliğinden, ilacın gerçekte izlediği
-     anatomik rotayla bugünün sinüsüne — burun boşluğu, sinüslerin ortak kapısı
-     (OMC), frontal için etmoidin yanından yukarı. Eğri örneklenip uzunluğu
-     ölçülüyor (ilerleyen uç için). */
+  /* Siklamenin yolu: o tarafın burun deliğinden, gerçekte izlenen anatomik
+     rotayla bugünün sinüsüne — burun boşluğu, sinüslerin ortak kapısı (OMC),
+     frontal için etmoidin yanından yukarı. Eğri örneklenip uzunluğu ölçülüyor
+     (ilerleyen uç için). İki taraflı günde her tarafa bir yol. */
   buildPath(){
-    const region = DAY_REGION[this.idx], sg = sideSign(this.idx), sd = sideKey(sg), D = DRAIN[sd];
+    this.paths = daySides(this.L).map(sd => this.sidePath(this.L.region, sd));
+  },
+  sidePath(region, sd){
+    const D = DRAIN[sd];
     const ctr = rg => { const c = polyAreaCentroid(ANAT[rg][sd]); return [c.cx, c.cy]; };
     const P = q => IMG(q);
     // burun deliği → septum boyunca ortak meatus (konkaların iç ucu ile septum arası)
@@ -3235,7 +3327,7 @@ const Cine = {
     out.push(pts[pts.length-1]);
     let L = 0; const cum = [0];
     for(let i=1;i<out.length;i++){ L += Math.hypot(out[i][0]-out[i-1][0], out[i][1]-out[i-1][1]); cum.push(L); }
-    this.path = { pts:out, cum, len:L };
+    return { pts:out, cum, len:L };
   },
   /* Kartın yeri: tahtanın solunda yer varsa orada (tahta tamamen görünür),
      yoksa altta. Altta durduğunda kart "yalın": başlık kartın içinden çıkıp
@@ -3267,59 +3359,79 @@ const Cine = {
     }
     this.lean = !cd.classList.contains('side');
   },
-  /* Bütün sinüsler, kanalları ve bölmeleriyle (tahtalarla aynı tanım).
+  /* Bütün sinüsler ve kanalları (tahtalarla aynı tanım).
      Durum: sıradakiler soluk, açılmışlar dolu renk + turkuaz "temiz" kenar,
      bugünkü parlak, nabızlı ve beyaz kenarlı. Bugünün tahtasına girmeyen
-     yapılar dalış başlarken sönüyor; tahtanınkiler silüete kadar kalıyor. */
-  drawAnatomy(c, px, allA, nowA, pulse){
-    const L = this.L, idx = this.idx, B0 = BOARDS[L.region];
-    const tSides = B0.both ? ['sol','sag'] : [L.side];
+     yapılar dalış başlarken sönüyor; tahtanınkiler silüete kadar kalıyor.
+     GOAL-039: iki taraflı günde bugünün iki sinüsü önce yüzden öne çıkıyor
+     (lift: büyüyüp gölge salıyor), sonra dalışla birlikte orta hatta doğru
+     kayıp kaynaşıyor (join) — join 1'de tam olarak tahtanın biçimi. */
+  drawAnatomy(c, px, allA, nowA, pulse, lift, join){
+    const L = this.L, idx = this.idx, tSides = daySides(L);
+    lift = lift || 0; join = join || 0;
     const dayOf = (rg, sd) => { for(let i=0;i<LEVELS.length;i++) if(DAY_REGION[i] === rg && DAY_SIDE[i] === sd) return i; return -1; };
-    const parts = boardParts(L), art = boardArt(L);
-    const inBoard = (rg, sd) => tSides.includes(sd) && parts.includes(rg);
+    const isNow = (rg, sd) => rg === L.region && tSides.includes(sd);
     const style = (rg, sd) => {
-      const col = ANAT_COL[rg], d = dayOf(rg, sd), now = rg === L.region && tSides.includes(sd);
-      const a = inBoard(rg, sd) ? nowA : allA;
+      const col = ANAT_COL[rg], d = dayOf(rg, sd), now = isNow(rg, sd);
+      const a = now ? nowA : allA;
       if(now) return { a, fill:rgbaA(col, .56 + .28*pulse), stroke:'rgba(255,255,255,.95)', lw:2.2, col, fa:.56 + .28*pulse };
       if(d >= 0 && d < idx) return { a, fill:rgbaA(col, .62), stroke:'rgba(120,244,236,.95)', lw:2, col, fa:.62 };
       return { a, fill:rgbaA(col, .42), stroke:rgbaA(col.map(v => v*.55|0), .85), lw:1.3, col, fa:.42 };
     };
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    const order = ['maxillary','frontal','nasal','ethmoid'];
-    for(const sd of ['sol','sag']) for(const rg of order){
-      const st = style(rg, sd); if(st.a <= .003) continue;
+    const shape = (rg, sd, st) => {
       c.globalAlpha = st.a;
       c.beginPath(); splinePath(c, ANAT[rg][sd], true);
       c.fillStyle = st.fill; c.fill();
       c.strokeStyle = st.stroke; c.lineWidth = st.lw*px; c.stroke();
+    };
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    const order = ['maxillary','frontal','nasal','ethmoid'];
+    for(const sd of ['sol','sag']) for(const rg of order){
+      if(isNow(rg, sd)) continue;
+      const st = style(rg, sd); if(st.a > .003) shape(rg, sd, st);
     }
     /* Kanallar: kendi sinüsünün renginde, kenarsız — görselde de ince birer
-       geçit; kenar çizilince haritada düğme gibi duruyorlardı. */
+       geçit. Tahtada yoklar; dalışta haritanın geri kalanıyla sönüyorlar. */
     for(const d of ANAT_DUCTS){
-      const st = style(d[0], d[1]); if(st.a <= .003) continue;
-      c.globalAlpha = st.a;
+      const st = style(d[0], d[1]); if(allA <= .003) continue;
+      c.globalAlpha = allA;
       c.strokeStyle = rgbaA(st.col, Math.min(1, st.fa + .15)); c.lineWidth = d[3];
       c.beginPath(); splinePath(c, d[2], false); c.stroke();
     }
-    /* Bölmeler ve konka sarmalları, ait oldukları sinüsün içine kırpılmış
-       (tahtada duvarın içinden başlıyorlar; haritada dışarı taşmasınlar).
-       Konkalar görseldeki gibi kırmızımsı, hücre bölmeleri açık renk. */
-    for(const w of ANAT_WALLS){
-      const st = style(w[0], w[1]); if(st.a <= .003) continue;
-      c.save();
-      c.beginPath(); splinePath(c, ANAT[w[0]][w[1]], true); c.clip();
-      c.globalAlpha = st.a;
-      c.strokeStyle = w[0] === 'nasal' ? 'rgba(178,58,66,.8)' : 'rgba(236,244,250,.85)';
-      c.lineWidth = Math.max(w[3], 1.4*px);
-      c.beginPath(); splinePath(c, w[2], false); c.stroke();
-      c.restore();
-    }
-    // bugünün hastalık ayrıntıları (harita görselli tahtada yoklar, haritada da yok)
-    c.globalAlpha = nowA;
-    c.fillStyle = 'rgba(48,26,34,.62)'; c.strokeStyle = 'rgba(48,26,34,.62)';
-    if(!art) for(const d of anatDisease(L.region, L.side, L.detail|0)){
-      if(d.pts) blob(c, d.pts);
-      else { c.lineWidth = d.w; c.beginPath(); splinePath(c, d.line, false); c.stroke(); }
+    // bugünün sinüsleri en üstte: öne çıkıp birleşenler komşularının altında kalmasın
+    const st = style(L.region, tSides[0]);
+    if(st.a > .003){
+      const pathOf = (u, sd) => {
+        const ct = polyAreaCentroid(ANAT[L.region][sd]), k = 1 + .14*lift*(1 - join);
+        u.translate(sideDX(L, sd)*join, 0);
+        u.translate(ct.cx, ct.cy); u.scale(k, k); u.translate(-ct.cx, -ct.cy);
+        u.beginPath(); splinePath(u, ANAT[L.region][sd], true);
+      };
+      if(tSides.length === 1) shape(L.region, tSides[0], st);
+      else {
+        /* İki biçim kaynaşırken tek silüet: dolgu ve kenar ayrı bir tuvalde
+           birleşimden çiziliyor — üst üste binen yerde iç kenar ve çift
+           yoğunlukta dolgu kalmıyor, dalışın sonu tahtanın biçimine akıyor. */
+        const uc = this.unionCv || (this.unionCv = document.createElement('canvas'));
+        if(uc.width !== this.cv.width || uc.height !== this.cv.height){ uc.width = this.cv.width; uc.height = this.cv.height; }
+        const u = uc.getContext('2d'), T = c.getTransform();
+        const each = f => { for(const sd of tSides){ u.save(); pathOf(u, sd); f(); u.restore(); } };
+        const blit = (alpha, shadow) => {
+          c.save(); c.setTransform(1,0,0,1,0,0); c.globalAlpha = alpha;
+          if(shadow > .003){ c.shadowColor = 'rgba(0,0,0,' + (.55*shadow).toFixed(3) + ')'; c.shadowBlur = 26*shadow; c.shadowOffsetY = 10*shadow; }
+          c.drawImage(uc, 0, 0); c.restore();
+        };
+        u.setTransform(1,0,0,1,0,0); u.clearRect(0,0,uc.width,uc.height); u.setTransform(T);
+        u.fillStyle = rgbaA(st.col, 1); each(() => u.fill());
+        blit(st.a*st.fa, lift*(1 - join));
+        u.setTransform(1,0,0,1,0,0); u.clearRect(0,0,uc.width,uc.height); u.setTransform(T);
+        u.strokeStyle = st.stroke; u.lineWidth = 2*st.lw*px; u.lineJoin = 'round';
+        each(() => u.stroke());
+        u.globalCompositeOperation = 'destination-out'; u.fillStyle = '#000';
+        each(() => u.fill());
+        u.globalCompositeOperation = 'source-over';
+        blit(st.a, 0);
+      }
     }
     c.globalAlpha = 1;
   },
@@ -3386,7 +3498,7 @@ const Cine = {
   },
   frame(){
     const t = this.sceneT((performance.now() - this.t0)/1000), c = this.ctx, dpr = this.dpr, W = this.W, H = this.H;
-    const L = this.L, idx = this.idx, region = DAY_REGION[idx], sg = sideSign(idx);
+    const L = this.L, region = L.region;
     c.setTransform(1,0,0,1,0,0);
     c.clearRect(0,0,this.cv.width,this.cv.height);
     if(t >= this.END){
@@ -3415,7 +3527,7 @@ const Cine = {
 
     /* Kamera: yüzün tamamından bugünün sinüsüne. Ölçek geometrik
        aradeğerleniyor (dalış hissi), hedef nokta tahtanın merkezine kayıyor. */
-    const fr = scrFrame, F = L.face, bb = faceBBox(region, sg);
+    const fr = scrFrame, F = L.face, bb = faceBBox(L);
     /* Kamera: yüzün tamamından tahtanın kendisine (GOAL-034). Hedef, tahtanın
        ekrandaki dönüşümünün ta kendisi; dalış bittiğinde haritadaki çizim ile
        tahta üst üste biniyor. Ölçek geometrik aradeğerleniyor (dalış hissi). */
@@ -3448,15 +3560,20 @@ const Cine = {
       faceSoft(c, q[0], q[1], r, r, rgbaA(ANAT_COL[region], .5));
       c.globalCompositeOperation = 'source-over';
     }
-    this.drawAnatomy(c, px, allA, nowA, pulse);
+    /* GOAL-039: iki taraflı günde iki sinüs, siklamen vardığında yüzden öne
+       çıkıyor (duraklama boyunca öyle bekliyor), dalışla birlikte birbirine
+       yaklaşıp kaynaşıyor ve ekranı kaplayan tahtaya dönüşüyor. */
+    const lift = L.pair ? smooth(sstep(.95, 1.35, t)) : 0;
+    const join = L.pair ? smooth(sstep(1.45, 2.55, t)) : 0;
+    this.drawAnatomy(c, px, allA, nowA, pulse, lift, join);
     c.globalAlpha = 1;
     this.drawLabels(c, s, o, t);
     c.setTransform(dpr*s,0,0,dpr*s, dpr*o[0], dpr*o[1]);
 
-    /* İlacın yolu ve ucundaki siklamen */
+    /* Siklamenin yolu ve ucundaki çiçek (iki taraflı günde iki yol) */
     const pathA = sstep(.2, .6, t) * (1 - sstep(1.5, 2.0, t));
-    if(pathA > .003 && this.path){
-      const P = this.path, head = P.len * smooth(sstep(.35, 1.35, t));
+    if(pathA > .003) this.paths.forEach((P, pi) => {
+      const head = P.len * smooth(sstep(.35, 1.35, t));
       c.globalAlpha = pathA; c.lineCap = 'round'; c.lineJoin = 'round';
       c.strokeStyle = 'rgba(53,224,216,.55)'; c.lineWidth = 2.2*px;
       c.beginPath(); c.moveTo(P.pts[0][0], P.pts[0][1]);
@@ -3475,15 +3592,18 @@ const Cine = {
       c.globalCompositeOperation = 'source-over';
       const iw = 30*px, ih = iw*PLAYER_AR;
       c.drawImage(playerImg, hx - iw/2, hy - ih/2, iw, ih);
-      // GOAL-038: süzülen çiçeğin ne olduğu yazıyla da belli olsun
+      /* GOAL-038: süzülen çiçeğin ne olduğu yazıyla da belli olsun. İki yolda
+         etiket bir kez, soldaki çiçeğin solunda (sağdakinin üstüne binmesin). */
+      if(pi > 0) return;
       c.save(); c.setTransform(dpr,0,0,dpr,0,0);
-      const lx = o[0] + s*hx + 20, ly = o[1] + s*hy - 18;
+      const tag = 'SİKLAMEN ÇİÇEĞİ';
       c.font = '700 13px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
-      const tw = c.measureText('İLAÇ').width;
+      const tw = c.measureText(tag).width;
+      const lx = this.paths.length > 1 ? o[0] + s*hx - 20 - tw : o[0] + s*hx + 20, ly = o[1] + s*hy - 18;
       c.fillStyle = 'rgba(6,14,20,.78)'; roundRectPath(c, lx - 7, ly - 11, lx + tw + 7, ly + 10, 6); c.fill();
-      c.fillStyle = '#ffd1e6'; c.textBaseline = 'middle'; c.fillText('İLAÇ', lx, ly);
+      c.fillStyle = '#ffd1e6'; c.textBaseline = 'middle'; c.fillText(tag, lx, ly);
       c.restore();
-    }
+    });
     c.globalAlpha = 1;
 
     /* Yüzdeki biçim → tahtadaki gerçek kesit. Silüet tahtanın ekrandaki
@@ -3555,15 +3675,18 @@ const Info = {
     this.setVis(false);
   },
   drawIcon(L){
-    const c = this.icon.getContext('2d'), S = this.icon.width, P = ANAT[L.region][L.side];
+    // iki taraflı günde iki biçim, aradaki boşlukla (haritadaki yerlerinde)
+    const c = this.icon.getContext('2d'), S = this.icon.width, Ps = daySides(L).map(sd => ANAT[L.region][sd]);
     let x0 = 9, y0 = 9, x1 = -9, y1 = -9;
-    for(const p of P){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    for(const P of Ps) for(const p of P){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
     const k = (S - 8) / Math.max(x1-x0, y1-y0);
     c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,S,S);
     c.setTransform(k,0,0,k, S/2 - k*(x0+x1)/2, S/2 - k*(y0+y1)/2);
-    c.beginPath(); splinePath(c, P, true);
-    c.fillStyle = rgbaA(ANAT_COL[L.region], .9); c.fill();
-    c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 2.5/k; c.stroke();
+    for(const P of Ps){
+      c.beginPath(); splinePath(c, P, true);
+      c.fillStyle = rgbaA(ANAT_COL[L.region], .9); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 2.5/k; c.stroke();
+    }
   },
   /* Her kapanıştan sonra: ilk kesim ilk bilgiyi, sonra hedefin her çeyreği
      bir sonrakini açıyor. (gx, gy): kapanan parçanın ortası — "+ BİLGİ"
@@ -3697,7 +3820,7 @@ const Info = {
 /* =========================================================================
    10d. KİM KİMDİR — ANLAŞILIRLIK (GOAL-038)
    Oyunun görsel dili güzel ama ilk bakışta herkes için açık değil: sahada
-   yönetilen siklamenin "sen / ilaç" olduğu, bakterinin ve mikropların ne
+   yönetilen siklamenin "sen" olduğu, virüsün ve mikropların ne
    olduğu kendiliğinden anlaşılmıyordu. Üç katman:
 
      - Her günün ilk saniyelerinde öğelerin üstünde kısa isim etiketleri
@@ -3725,7 +3848,7 @@ const Guide = {
     return el;
   },
   STEPS:[
-    'Bu sensin: siklamen özlü ilaç. Çevrendeki altın halka dolu oldukça kenar çizgisinde güvendesin.',
+    'Bu sensin: siklamen çiçeği. Çevrendeki altın halka dolu oldukça kenar çizgisinde güvendesin.',
     'Dokuya gir, bir parça çiz ve kenara geri dön — kapattığın alan temizlenir.',
     'Harika! Çizerken mikroplar çizgine değerse can kaybedersin. Hedefe ulaşınca gün biter.'
   ],
@@ -3736,7 +3859,7 @@ const Guide = {
       this.tagT -= dt;
       const a = clamp(this.tagT, 0, 1).toFixed(2), sc = root.scale.x;
       /* Çakışan etiket atlanıyor (küçük ekranda mikroplar üst üste binip
-         oyuncunun etiketini örtüyordu). Öncelik: sen, bakteri, mikroplar. */
+         oyuncunun etiketini örtüyordu). Öncelik: sen, virüs, mikroplar. */
       const taken = [], vw = innerWidth, vh = innerHeight;   // döngüden önce: stil yazarken okumak her etikette düzeni yeniden hesaplatıyordu
       const put = (gx, gy, off, text, cls, w) => {
         const p = this.toScreen(gx, gy), x = p[0], y = p[1] - off, hw = w/2 + 4;
@@ -3749,9 +3872,9 @@ const Guide = {
       };
       // rehber balonu açıkken "sen" etiketi gereksiz: balon zaten onu söylüyor
       const meOff = playerW*.75*sc + 6;              // kalkan halkasının hemen üstü
-      if(this.step < 0) put(G.px + .5, G.py + .5, meOff, 'SEN · İLAÇ', 'me', 92);
+      if(this.step < 0) put(G.px + .5, G.py + .5, meOff, 'SEN · SİKLAMEN ÇİÇEĞİ', 'me', 176);
       else taken.push([this.toScreen(G.px + .5, G.py + .5)[0], this.toScreen(G.px + .5, G.py + .5)[1] - meOff, 60]);
-      for(const b of G.bosses) put(b.x, b.y, b.r*CS*sc + 6, 'BAKTERİ', 'foe', 74);
+      for(const b of G.bosses) put(b.x, b.y, b.r*CS*sc + 6, 'VİRÜS', 'foe', 62);
       for(const m of G.minions) put(m.x, m.y, 15*sc + 4, 'MİKROP', 'foe small', 62);
       // güçlendiriciler en son: yer kalırsa ne işe yaradıkları da yazsın
       for(const p of G.pus) if(!p.collected && cells[p.y*GW+p.x] === EMPTY){
@@ -3787,13 +3910,13 @@ function showHowTo(){
   showMenuScreen(
     `<div class="menuBrand"><div class="kicker">NASIL OYNANIR</div><div class="title">Kim kimdir?</div></div>
      <div class="howList">
-       <div class="howRow"><img src="${playerAssetUrl}" alt=""><div><b>Sen: siklamen özlü ilaç</b>
-         <p>Kenar çizgisinin üstünde güvendesin — çevrendeki altın halka (ilaç kalkanı) dolu oldukça. Halka zamanla azalır, kestikçe dolar; bitince kenarda da vurulursun. ${isTouch ? 'Parmağını sürükleyerek' : 'Ok tuşları ya da WASD ile'} yönlendir.</p></div></div>
+       <div class="howRow"><img src="${playerAssetUrl}" alt=""><div><b>Sen: siklamen çiçeği</b>
+         <p>Kenar çizgisinin üstünde güvendesin — çevrendeki altın halka (siklamen kalkanı) dolu oldukça. Halka zamanla azalır, kestikçe dolar; bitince kenarda da vurulursun. ${isTouch ? 'Parmağını sürükleyerek' : 'Ok tuşları ya da WASD ile'} yönlendir.</p></div></div>
        <div class="howRow"><span class="howCut"></span><div><b>Kes ve kapat</b>
          <p>Dokuya gir, bir parça çiz ve kenara geri dön. Kapattığın alan temizlenir; hedef yüzdeye ulaşınca gün biter.</p></div></div>
-       <div class="howRow"><span class="howTiers"><img src="${bossAssetUrl}" alt=""><img src="${boss2AssetUrl}" alt=""><img src="${boss3AssetUrl}" alt=""></span><div><b>Bakteri</b>
-         <p>Büyük düşman. Çizerken çizgine ya da sana değerse can kaybedersin. Bakterinin olmadığı taraf temizlenir.
-            Kür ilerledikçe evrilir: 4. günde büyür, 7. günde en büyük ve en hızlı hâline gelir.</p></div></div>
+       <div class="howRow"><span class="howTiers"><img src="${bossAssetUrl}" alt=""><img src="${boss2AssetUrl}" alt=""><img src="${boss3AssetUrl}" alt=""></span><div><b>Virüs</b>
+         <p>Büyük düşman. Çizerken çizgine ya da sana değerse can kaybedersin. Virüsün olmadığı taraf temizlenir.
+            Kür ilerledikçe evrilir: ${BOSS_TIER_BY_DAY.indexOf(1) + 1}. günde büyür, ${BOSS_TIER_BY_DAY.indexOf(2) + 1}. günde en büyük ve en hızlı hâline gelir.</p></div></div>
        <div class="howRow"><span class="howPair"><img src="${minionFlagellaAssetUrl}" alt=""><img src="${minionSporeAssetUrl}" alt=""></span><div><b>Mikroplar</b>
          <p>Küçük ve hızlı; onlar da çizgini keser. Kapattığın alanın içinde kalan mikrop yok olur.</p></div></div>
        <div class="howRow"><span class="howBreath"></span><div><b>Nefes</b>
@@ -4867,7 +4990,10 @@ if(import.meta.env && import.meta.env.DEV){
     setDir: d => { botDir = d; },
     begin(idx){ hideMenuScreen(); hidePanel(); G.levelIdx = idx; G.score = 0; G.lives = 3;
                 prepareLevel(idx); startLevel(); app.ticker.stop(); },
-    stopTicker(){ app.ticker.stop(); }
+    stopTicker(){ app.ticker.stop(); },
+    startTicker(){ app.ticker.start(); },
+    // görsel kontrol: boşluğun sol yarısını temizlenmiş say
+    revealHalf(){ for(let i=0;i<GW*GH;i++) if(cavity[i] && (i%GW) < cavCX) cells[i] = FILL; rasterRegion(0,0,GW,GH); }
   };
 }
 

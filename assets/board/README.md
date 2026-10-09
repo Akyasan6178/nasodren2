@@ -9,11 +9,15 @@ izlenen konturlar) kurulmaya devam eder.
 
 | Dosya adı | Nerede kullanılır |
 |---|---|
-| `day01.png` … `day08.png` | Yalnızca o günde |
+| `day01.png` … `day12.png` | Yalnızca o günde (iki taraflı günlerde kullanılmaz) |
 | `nasal_sol.png` / `nasal_sag.png` | Gün 1 / Gün 2 — Burun boşluğu |
-| `maxillary_sol.png` / `maxillary_sag.png` | Gün 3 / Gün 4 — Maksiller sinüs |
-| `ethmoid_sol.png` / `ethmoid_sag.png` | Gün 5 / Gün 6 — Etmoid sinüs |
-| `frontal_sol.png` / `frontal_sag.png` | Gün 7 / Gün 8 — Frontal sinüs |
+| `maxillary_sol.png` / `maxillary_sag.png` | Gün 4 / Gün 5 — Maksiller sinüs |
+| `ethmoid_sol.png` / `ethmoid_sag.png` | Gün 7 / Gün 8 — Etmoid sinüs |
+| `frontal_sol.png` / `frontal_sag.png` | Gün 10 / Gün 11 — Frontal sinüs |
+
+Her bölgenin üçüncü günü (3, 6, 9, 12) iki taraf birlikte oynanır: aynı
+bölgenin `_sol` ve `_sag` görselleri orta hatta doğru kaydırılıp kaynaştırılır
+(bkz. `PAIR_OVERLAP`). Bu günler için ayrıca görsel gerekmez.
 
 Öncelik: önce `dayNN.png`, yoksa bölge + taraf. `sol` ekranın solundaki taraf
 (orta hat biçimin sağında), `sag` sağdaki.
@@ -38,5 +42,5 @@ tahtasını değiştirir, haritaya dokunmaz.
   ama biçim değişince eğri `tools/denge-testi.mjs` ile yeniden ölçülmeli.
 - Boşluk tek parça olmalı ve dar boyunlar en az birkaç yüzde genişlikte
   kalmalı; tahta 160 × 160 hücrelik ızgaraya düşüyor, çok ince geçitler kopar.
-- Harita görselli günlerde polip, kist gibi hastalık ayrıntıları çizilmiyor —
-  biçim görselde ne ise tahtada o.
+- Tahtanın içi tek parça olmalı: iç bölme, çizgi ya da delik bırakılmamalı
+  (oyunda alanı cep cep bölüyor). Biçim görselde ne ise tahtada o.

@@ -6,19 +6,20 @@ altyazısıyla birlikte gösteriliyor. (Eskiden tahtanın ortasında da açığa
 `assets/bg/README.md`.) Buraya bırakılan PNG'ler otomatik bulunur ve prosedürel
 çizimin yerine geçer — kod değişikliği gerekmez.
 
-Dosya adı: `day01.png` … `day08.png`.
+Dosya adı: `day01.png` … `day12.png`.
 
 ## Bölgeler
 
 Günler `assets/sinuzit.jfif`teki önden görünümdeki dört yapıya dağılıyor
-(kür 8 gün). Her bölgede birinci gün sol, ikinci gün sağ taraftır:
+(kür 12 gün). Her bölgede birinci gün sol, ikinci gün sağ taraf, üçüncü gün
+iki taraf birlikte:
 
 | Gün | Bölge |
 |---|---|
-| 1-2 | Burun boşluğu |
-| 3-4 | Maksiller sinüs |
-| 5-6 | Etmoid sinüs |
-| 7-8 | Frontal sinüs |
+| 1-3 | Burun boşluğu |
+| 4-6 | Maksiller sinüs |
+| 7-9 | Etmoid sinüs |
+| 10-12 | Frontal sinüs |
 
 Buradaki bilgi görseli bölgeyi değil **günün tedavi konusunu** anlatır; bölge
 zaten bölüm girişindeki haritada ve HUD başlığında yazıyor.
@@ -29,12 +30,16 @@ zaten bölüm girişindeki haritada ve HUD başlığında yazıyor.
 |---|---|---|---|
 | 1 | Akut tıkanıklık | Kanla dolu kılcal damar ağı | KILCAL DAMARLAR DOLU |
 | 2 | Ödem ve basınç | Sıvı tutmuş, şişmiş mukoza hücreleri | ÖDEMLİ MUKOZA |
-| 3 | Mukus yoğunluğu | Goblet hücreleri, koyu mukus örtüsü | KOYU MUKUS TABAKASI |
-| 4 | Drenajın düzenlenmesi | Katmanlar hâlinde süzülen mukus | MUKUS AKIŞI |
-| 5 | Ostium açılımı | Dokuda açılmış ostium ağzı | OSTIUM AÇIKLIĞI |
-| 6 | Koruma modu | **Siklamen** (`assets/siclament.png`) | SİKLAMEN EKSTRESİ |
-| 7 | Kronik destek | Sağlıklı mukoza kesiti | SAĞLIKLI MUKOZA |
-| 8 | Tam havalandırma | Havayla dolmuş, ışık alan sinüs | HAVALANAN SİNÜS |
+| 3 | Hipereminin kırılması | Ortasından daralan damarlar | DAMARLAR DARALIYOR |
+| 4 | Mukus yoğunluğu | Goblet hücreleri, koyu mukus örtüsü | KOYU MUKUS TABAKASI |
+| 5 | Salgının incelmesi | İri topakların ince iplik ve damlacığa dönüşmesi | SALGI İNCELİYOR |
+| 6 | Drenajın düzenlenmesi | Katmanlar hâlinde süzülen mukus | MUKUS AKIŞI |
+| 7 | Ostium açılımı | Dokuda açılmış ostium ağzı | OSTIUM AÇIKLIĞI |
+| 8 | Basıncın dengelenmesi | Dipte duran salgı, yükselen hava kabarcıkları | HAVA DOLUYOR |
+| 9 | Normal fonksiyon | Çalışan silyalı epitel | SİLYALI EPİTEL |
+| 10 | Koruma modu | **Siklamen** (`assets/siclament.png`) | SİKLAMEN EKSTRESİ |
+| 11 | Kronik destek | Sağlıklı mukoza kesiti | SAĞLIKLI MUKOZA |
+| 12 | Tam havalandırma | Havayla dolmuş, ışık alan sinüs | HAVALANAN SİNÜS |
 
 ## Üslup
 

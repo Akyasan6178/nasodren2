@@ -1036,14 +1036,14 @@ function drawCover(c, img){
    baştan sona kaplayan tek parça illüstrasyonu (hi-bit: düz yüzeyler, birkaç
    ton basamağı, temiz çizgi). Ortak iskelet:
      - Boşluğun içi aydınlık, hava dolu (bölge rengine çalan ton, üstten ışık).
-     - Duvarlar boyunca ince, pürüzsüz, hafifçe ışıyan bir zar — kesitin
+     - Duvarlar boyunca ince, pürüzsüz, pembe bir zar — kesitin
        biçimine kendiliğinden uyuyor (ızgaradaki duvara uzaklıktan).
      - Havada ışık huzmeleri, dipten tepeye yükselen hava akımları ve
        kabarcıklar.
    GOAL-040: zar artık et gibi değil. Yüzeydeki silyalar ("kıllı yapı"),
-   damar çizgileri ve kıvrım dokusu kaldırıldı, zar inceldi ve rengi havanın
-   tonuna yaklaştı: sahne yalnızca "bir boşluğun içindeyim" hissini versin,
-   itici bir organik ayrıntı göstermesin.
+   damar çizgileri ve kıvrım dokusu kaldırıldı: sahne yalnızca "bir boşluğun
+   içindeyim" hissini versin, itici bir organik ayrıntı göstermesin. Eski
+   pembe renk kaldı (kullanıcı isteği), bant eskisinden biraz ince.
    Bölgeye özel: burunda konkaların arasından akan hava; maksillerde tavanda
    ışık saçan ostium ağzı ve tabanda diş kökleri; etmoidde ince duvarlı bal
    peteği hücreleri ve parlayan ağızları; frontalde güçlü ışık ve dipteki
@@ -1058,8 +1058,8 @@ const SCENE_AIR = {   // dipten tepeye
   ethmoid:   ['#08182c','#123762','#2a64a0','#6aa2d6','#dcecfb'],
   frontal:   ['#0a1f1a','#13453a','#2a7c63','#72c49f','#e2f8ea']
 };
-const SCENE_MUC = ['#3a2030','#7a4658','#c08494','#f0c4c8'].map(hex2rgb);   // duvardan yüzeye: yumuşak gül-şeftali
-const SCENE_MUC_HI = hex2rgb('#fff0ec');
+const SCENE_MUC = ['#4a1d2c','#8a3a4d','#c9677a','#ec9aa6'].map(hex2rgb);   // duvardan yüzeye: eski pembe zar
+const SCENE_MUC_HI = hex2rgb('#ffe0e4');
 const sceneDist = new Float32Array(GW*GH);
 const sceneMask = makeCanvas(HW,HH), sceneOv = makeCanvas(HW,HH);
 /* Izgarada duvara (boşluk dışı hücre) uzaklık, hücre biriminde — iki geçişli
@@ -1119,7 +1119,7 @@ function paintHealthy(L){
   const A = sceneAnchors(), rg = L.region;
   const arc = clamp((L.day-1)/Math.max(1, LEVELS.length-1), 0, 1), bright = .84 + .2*arc;
   const air = (SCENE_AIR[rg] || SCENE_AIR.nasal).map(hex2rgb);
-  const T = rg === 'ethmoid' ? 2.0 : 2.6;                       // zar kalınlığı (hücre) — ince bir kenar
+  const T = rg === 'ethmoid' ? 2.6 : 3.4;                       // zar kalınlığı (hücre) — eskisinden (3.2/4.4) biraz ince
   const n1 = fbmHi(46, L.day*131+7, 3);
   const img = c.createImageData(HW,HH), d = img.data;
   const mk = sceneMask.getContext('2d'), mimg = mk.createImageData(HW,HH), md = mimg.data;
@@ -1135,12 +1135,11 @@ function paintHealthy(L){
       const lx = gx - gsx, glow = Math.exp(-(lx*lx + ly*ly)/gs2);
       const ao = 1 - sstep(e, e + 3.5, dist);
       rampTo(air, (.14 + v*.48 + glow*.28 + (n1[i]-.5)*.12 - ao*.10)*bright, ac);
-      // zar: duvardan yüzeye koyudan açığa, pürüzsüz; havanın tonunu alıyor,
-      // yüzeyinde tek ince ışık çizgisi (damar, kıvrım, sil yok)
+      // zar: duvardan yüzeye koyudan açığa pembe, pürüzsüz; yüzeyinde tek
+      // ince ışık çizgisi (damar, kıvrım, sil yok)
       const m = clamp(dist/e, 0, 1);
-      rampTo(SCENE_MUC, Math.pow(m, .8), col);
-      mixTo(col, ac, .28 + .22*m);
-      mixTo(col, SCENE_MUC_HI, sstep(.72,.92,m)*(1 - sstep(.92,1,m))*.45 + glow*m*.10);
+      rampTo(SCENE_MUC, Math.pow(m, .85), col);
+      mixTo(col, SCENE_MUC_HI, sstep(.78,.95,m)*(1 - sstep(.95,1,m))*.6 + glow*m*.12);
       const aw = sstep(e - .3, e + .3, dist);                   // havanın payı
       mixTo(col, ac, aw);
       d[i*4] = col[0]; d[i*4+1] = col[1]; d[i*4+2] = col[2]; d[i*4+3] = 255;
